@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  # Main service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lead-enrichment-app
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # Override or add specific settings
+      - PORT=8080
+      - PYTHONPATH=/app/src
+    # volumes:
+    #   # Mount source for prod check (only development)
+    #   - ./src:/app/src:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import requests; requests.get('http://localhost:8080/health', timeout=2)",
+        ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Development service (with hot reload)
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lead-enrichment-dev
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # Override or add specific settings
+      - PORT=8080
+      - PYTHONPATH=/app/src
+    volumes:
+      - ./src:/app/src
+    command: ["python", "src/scripts/dev.py"]
+    restart: unless-stopped
+    profiles:
+      - dev
