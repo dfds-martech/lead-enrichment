@@ -1,0 +1,17 @@
+# Work files
+data/
+notebooks/
+
+# Env files
+.env
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv

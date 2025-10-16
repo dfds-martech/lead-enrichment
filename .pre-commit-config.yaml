@@ -1,0 +1,94 @@
+default_language_version:
+  python: python3.12
+
+repos:
+  # Code safety and cleanup
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-ast
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-json
+        stages: ["manual"]
+        exclude: ".vscode/.*"
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: "notebooks/.*"
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+        exclude: "data/.*, notebooks/.*"
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: no-commit-to-branch
+
+  # Ruff – formatting and linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.2
+    hooks:
+      - id: ruff
+        args:
+          [
+            --fix,
+            --exit-non-zero-on-fix,
+            --target-version=py312,
+            --exclude=tests,
+          ]
+        exclude: "notebooks/.*"
+      - id: ruff-format
+        exclude: "notebooks/.*"
+
+  # Pyright – static type checking
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.402
+    hooks:
+      - id: pyright
+        exclude: "notebooks/.*"
+
+  # MyPY – Do we need this? when we have Pyright?
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.16.1
+    hooks:
+      - id: mypy
+        language: system
+        stages: ["manual"]
+        exclude: "notebooks/.*"
+        args: ["--check-untyped-defs", "--install-types"]
+
+  # Pyupgrade
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py312-plus]
+        stages: ["manual"]
+        exclude: "notebooks/.*"
+
+  # Security scanning
+  # FIXME: guess we don't really need this
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.5
+    hooks:
+      - id: bandit
+        args: ["-r"]
+        exclude: "notebooks/.*|.*_test\\.py$|test_.*\\.py$"
+
+  # uv hook – update lockfile
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.7.19
+    hooks:
+      - id: uv-lock
+
+  # Local pytest command (reuses uv environment)
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: env CLASSIFICATION_OPENAI_MODEL=gpt-4o-mini uv run python -m pytest -v tests/
+        language: system
+        stages: [pre-push]
+        types: [python]
+        pass_filenames: false
+        always_run: true
