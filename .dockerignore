@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.venv
+.env
+
+# Development
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Notebooks and data
+notebooks/
+data/
+*.ipynb
+
+# Documentation
+*.md
+!README.md
+
+# Testing
+tests/
+.coverage
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+
