@@ -2,7 +2,20 @@
 
 A FastAPI service for B2B lead enrichment with company research and Orbis matching capabilities.
 
-### Local Development
+## Quick Start with Docker
+
+```bash
+# Build image
+docker compose build
+
+# Run container
+docker compose up
+
+# Access API
+open http://localhost:8080/docs
+```
+
+## Local Development
 
 ```bash
 # Install dependencies
@@ -11,25 +24,15 @@ uv sync
 # Install dev dependencies
 uv sync --group dev
 
-## Format and lint code
-ruff check . # Check for issues
-ruff format . # Format code
-
-## Run tests
-pytest
-
 # Run locally
-python -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8080
-```
+uv run dev
 
-### Deploy to Google Cloud Run
+# Format and lint code
+ruff check .    # Check issues
+ruff format .   # Format code
 
-```bash
-# Set your project ID
-export PROJECT_ID="your-project-id"
-
-# Deploy
-./deploy.sh $PROJECT_ID lead-enrichment
+# Run tests (not any yet)
+pytest
 ```
 
 ## API Endpoints
@@ -38,7 +41,7 @@ export PROJECT_ID="your-project-id"
 
 - `GET /health` - Service health status
 
-### Company Matching
+### Company Matching (upcoming)
 
 - `POST /api/v1/company/match` - Match companies using Orbis API
 
