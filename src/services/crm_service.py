@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from models.lead import Lead
+
 root_dir = Path.cwd().parent
 
 
@@ -23,46 +25,14 @@ class CRMService:
         return self._leads
 
     def get_record(self, index):
-        return self.leads.iloc[index]
+        record = self.leads.iloc[index].to_dict()
+        return {k: (None if pd.isna(v) else v) for k, v in record.items()}
 
     def get_form(self, index):
         form = self.get_record(index)["dfds_fullpayload"]
         return json.loads(form)
 
-    def get_lead(self, index):
-        form = self.get_form(index)
+    def get_lead(self, index) -> Lead:
+        """Get a Lead object from the CRM."""
         record = self.get_record(index)
-
-        transport = {
-            "collection_city": record.get("dfds_collectioncity", None),
-            "collection_country": "TODO",
-            "delivery_city": record.get("dfds_deliverrycity", None),
-            "delivery_country": "TODO",
-        }
-
-        userSegmentID = form.get("userSegmentID", {})
-        identifiers = {
-            "email": form.get("CompanyEmail", None) or form.get("PersonalEmail", None),
-            "user_id": userSegmentID.get("UserId", None),
-            "anonymous_id": userSegmentID.get("anonymousUserId", None),
-        }
-
-        user = {
-            "first_name": form.get("FirstName", "").strip(),
-            "last_name": form.get("LastName", "").strip(),
-        }
-        user["full_name"] = f"{user['first_name']} {user['last_name']}".strip()
-
-        company = {
-            "name": form.get("CompanyName"),
-            "city": record.get("address1_city") or record.get("address1_composite"),
-            "contry": "TODO",
-            "phone_number": form.get(""),
-        }
-
-        merged = form | transport
-        return {
-            "identifiers": identifiers,
-            "user": user,
-            "company": company,
-        } | dict(sorted(merged.items()))
+        return Lead.from_crm(record)
