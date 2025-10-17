@@ -5,7 +5,7 @@ import requests
 from pydantic import BaseModel, Field
 
 from common.config import config, get_logger
-from custom_agents.company_research import CompanyResearchProfile
+from custom_agents.company_research import CompanyResearchResult
 
 logger = get_logger(__name__)
 
@@ -109,6 +109,35 @@ class OrbisMatchResult(BaseModel):
         return max(self.hits, key=lambda x: x.score or 0)
 
 
+class OrbisCompanyDetails(BaseModel):
+    """Detailed company information from Orbis data endpoint."""
+
+    bvd_id: str
+    name: str | None = None
+    consolidation_code: str | None = None
+    country_iso_code: str | None = None
+    nace2_core_code: str | None = None
+    employees: int | None = None
+    operating_revenue: float | None = None
+    year_last_accounts: str | None = None
+    legal_status: str | None = None
+
+    @classmethod
+    def build_from_response(cls, bvd_id: str, item: dict[str, Any]) -> "OrbisCompanyDetails":
+        """Build OrbisCompanyDetails from API response item."""
+        return cls(
+            bvd_id=bvd_id,
+            name=item.get("NAME"),
+            consolidation_code=item.get("CONSOLIDATION_CODE"),
+            country_iso_code=item.get("COUNTRY_ISO_CODE"),
+            nace2_core_code=item.get("NACE2_CORE_CODE"),
+            employees=item.get("EMPL"),
+            operating_revenue=item.get("OPRE"),
+            year_last_accounts=item.get("YEAR_LAST_ACCOUNTS"),
+            legal_status=item.get("LEGAL_STATUS"),
+        )
+
+
 class OrbisService:
     """Service for interacting with Orbis API."""
 
@@ -142,8 +171,6 @@ class OrbisService:
         Returns:
             OrbisMatchResult with structured match data and filtering capabilities
         """
-
-        endpoint = f"{ORBIS_BASE}/match"
 
         # Build criteria - only include non-None values
         criteria = {}
@@ -183,7 +210,7 @@ class OrbisService:
         try:
             logger.info(f"Matching company with criteria: {criteria}")
 
-            response = self.session.get(endpoint, params={"QUERY": json.dumps(query)}, timeout=30)
+            response = self.session.get(f"{ORBIS_BASE}/match", params={"QUERY": json.dumps(query)}, timeout=30)
             response.raise_for_status()
             data = response.json()
 
@@ -200,14 +227,14 @@ class OrbisService:
             logger.error(f"Unexpected error in match_company: {e}", exc_info=True)
             raise
 
-    def match_from_company_search_profile(
-        self, profile: CompanyResearchProfile, score_limit: float = 0.7, exclusion_flags: list[str] | None = None
+    def match_from_company_search_result(
+        self, result: CompanyResearchResult, score_limit: float = 0.7, exclusion_flags: list[str] | None = None
     ) -> OrbisMatchResult:
         """
-        Match a company from a CompanyResearchProfile.
+        Match a company from a CompanyResearchResult.
 
         Args:
-            profile: Dictionary with company profile data
+            result: Dictionary with company reserach result data
             score_limit: Minimum match score
             exclusion_flags: List of exclusion flags
 
@@ -215,13 +242,71 @@ class OrbisService:
             OrbisMatchResult with structured match data
         """
         return self.match_company(
-            name=profile.get("name"),
-            city=profile.get("city"),
-            country=profile.get("country"),
-            address=profile.get("address"),
-            postcode=profile.get("zip_code"),
-            national_id=profile.get("national_id"),
-            email_or_website=profile.get("domain"),
+            name=result.name,
+            city=result.city,
+            country=result.country,
+            address=result.address,
+            postcode=result.zip_code,
+            national_id=result.national_id,
+            email_or_website=result.domain,
             score_limit=score_limit,
             exclusion_flags=exclusion_flags,
         )
+
+    def get_company_details(self, bvd_id: str, fields: list[str] | None = None) -> OrbisCompanyDetails | None:
+        """
+        Get detailed company information using BvDID.
+
+        Args:
+            bvd_id: The BvD identifier for the company
+            fields: Optional list of fields to select. Defaults to standard fields.
+
+        Returns:
+            OrbisCompanyDetails object with company information, or None if not found
+        """
+
+        default_fields = [
+            "NAME",
+            "CONSOLIDATION_CODE",
+            "COUNTRY_ISO_CODE",
+            "NACE2_CORE_CODE",
+            "EMPL",
+            "OPRE",
+            "YEAR_LAST_ACCOUNTS",
+            "LEGAL_STATUS",
+        ]
+
+        query_payload = {
+            "QUERY": {
+                "WHERE": [{"BvDID": [bvd_id]}],
+                "SELECT": fields or default_fields,
+            }
+        }
+
+        try:
+            logger.info(f"Fetching company details for BvD ID: {bvd_id}")
+
+            response = self.session.post(f"{ORBIS_BASE}/data", json=query_payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            if not data.get("Data"):
+                logger.warning(f"No data found for BvD ID: {bvd_id}")
+                return None
+
+            if len(data["Data"]) > 1:
+                logger.warning(f"Multiple companies found for BvD ID: {bvd_id}")
+
+            company_data = data["Data"][0]
+            print(company_data)
+            details = OrbisCompanyDetails.build_from_response(bvd_id, company_data)
+
+            logger.info(f"Successfully fetched details for {details.name}")
+            return details
+
+        except requests.RequestException as e:
+            logger.error(f"Orbis API request failed for BvD ID {bvd_id}: {e}", exc_info=True)
+            raise Exception(f"API request failed: {str(e)}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error in get_company_details: {e}", exc_info=True)
+            raise
