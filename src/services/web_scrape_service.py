@@ -28,6 +28,32 @@ class ScrapeResult(BaseModel):
     error: str | None = None
     raw_html: str | None = None
 
+    def to_markdown(self, max_chars: int = 5000) -> str:
+        """Render a markdown summary combining title, meta, and first chunk(s)."""
+        lines = []
+        if self.title:
+            lines.append(f"## {self.title}")
+        if self.final_url:
+            lines.append(f"**URL:** {self.final_url}")
+        if self.meta_description:
+            lines.append(f"> {self.meta_description}")
+        lines.append("")
+        # Append first few chunks (or truncated) for reading
+        total = 0
+        for chunk in self.text_chunks:
+            if total >= max_chars:
+                break
+            piece = chunk[: (max_chars - total)]
+            lines.append(piece)
+            total += len(piece)
+        if total < self.word_count:
+            lines.append("\n_(… more text truncated …)_")
+        return "\n\n".join(lines)
+
+    def to_text(self, max_chars: int = 5000) -> str:
+        """Plain-text fallback version."""
+        return self.to_markdown(max_chars)
+
 
 class WebScrapeService:
     """Web scraper with multiple extraction methods for robust content extraction.
@@ -155,7 +181,7 @@ class WebScrapeService:
         except requests.RequestException as e:
             return ScrapeResult(ok=False, error=str(e))
 
-        ctype = response.headers.get("Content-Type", "")
+        content_type = response.headers.get("Content-Type", "")
         status = response.status_code
         final_url = response.url
 
@@ -164,16 +190,16 @@ class WebScrapeService:
                 ok=False,
                 final_url=final_url,
                 status_code=status,
-                content_type=ctype,
+                content_type=content_type,
                 error=f"HTTP error {status}",
             )
-        if "html" not in ctype.lower():
+        if "html" not in content_type.lower():
             # Non-HTML (e.g. PDF, image) — we might decide to skip or handle specially
             return ScrapeResult(
                 ok=True,
                 final_url=final_url,
                 status_code=status,
-                content_type=ctype,
+                content_type=content_type,
                 text_chunks=[],
                 word_count=0,
                 raw_html=response.text,
@@ -225,7 +251,7 @@ class WebScrapeService:
             ok=True,
             final_url=final_url,
             status_code=status,
-            content_type=ctype,
+            content_type=content_type,
             title=title,
             meta_description=meta_desc,
             text_chunks=chunks,

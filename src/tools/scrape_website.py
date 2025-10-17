@@ -1,6 +1,6 @@
 from agents import function_tool
 
-from services.web_scrape_service import ScrapeRequest, ScrapeResult, WebScrapeService
+from services.web_scrape_service import ScrapeResult, WebScrapeService
 
 
 @function_tool
@@ -34,8 +34,7 @@ def scrape_website(url: str, max_chars: int = 30000, debug: bool = False) -> Scr
     """
     try:
         scraper = WebScrapeService()
-        req = ScrapeRequest(url=url, max_chars=max_chars)
-        res = scraper.scrape(req)
+        response = scraper.scrape(url, max_chars=max_chars)
     except Exception as e:
         return ScrapeResult(
             ok=False,
@@ -50,8 +49,8 @@ def scrape_website(url: str, max_chars: int = 30000, debug: bool = False) -> Scr
             raw_html=None,
         )
 
-    # Optionally prune raw_html to reduce payload size when not debugging
+    # prune raw_html to reduce payload size, if not debugging
     if not debug:
-        res.raw_html = None
+        response.raw_html = None
 
-    return res
+    return response
