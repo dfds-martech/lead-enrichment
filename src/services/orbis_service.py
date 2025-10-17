@@ -195,7 +195,7 @@ class OrbisService:
 
         except requests.RequestException as e:
             logger.error(f"Orbis API request failed: {e}", exc_info=True)
-            raise Exception(f"API request failed: {str(e)}")
+            raise Exception(f"API request failed: {str(e)}") from e
         except Exception as e:
             logger.error(f"Unexpected error in match_company: {e}", exc_info=True)
             raise
