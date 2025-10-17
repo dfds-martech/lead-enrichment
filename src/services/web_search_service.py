@@ -2,7 +2,6 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import requests
-from agents import function_tool
 from pydantic import BaseModel, HttpUrl
 
 from common.config import config, get_logger
@@ -23,7 +22,7 @@ class SearchHit(BaseModel):
     provider: str
 
 
-class SearchResponse(BaseModel):
+class SearchResult(BaseModel):
     success: bool
     query: str
     hits: list[SearchHit]
@@ -32,11 +31,11 @@ class SearchResponse(BaseModel):
     error: str | None = None
 
 
-class WebSearcher:
+class WebSearchService:
     """Searches the web using Serper and returns structured results.
 
     Example:
-        ws = WebSearcher()
+        ws = WebSearchService()
         response = ws.search(query, max_results)
         return response
     """
@@ -74,9 +73,9 @@ class WebSearcher:
             logger.warning(f"Could not build SearchHit for {link}: {e}")
             return None
 
-    def search(self, query: str, max_results: int = 8) -> SearchResponse:
+    def search(self, query: str, max_results: int = 8) -> SearchResult:
         if not self.api_key:
-            return SearchResponse(
+            return SearchResult(
                 success=False,
                 query=query,
                 hits=[],
@@ -91,7 +90,7 @@ class WebSearcher:
             data = resp.json()
         except requests.RequestException as e:
             logger.error(f"Search request failed: {e}", exc_info=True)
-            return SearchResponse(
+            return SearchResult(
                 success=False,
                 query=query,
                 hits=[],
@@ -101,7 +100,7 @@ class WebSearcher:
             )
         except ValueError as e:
             logger.error(f"JSON parse error in search response: {e}", exc_info=True)
-            return SearchResponse(
+            return SearchResult(
                 success=False,
                 query=query,
                 hits=[],
@@ -119,39 +118,11 @@ class WebSearcher:
                 seen.add(str(h.url))
                 hits.append(h)
 
-        return SearchResponse(
+        return SearchResult(
             success=True,
             query=data.get("searchParameters", {}).get("q", query),
             hits=hits,
             engine=data.get("engine"),
             credits_used=data.get("credits"),
             error=None,
-        )
-
-
-@function_tool
-def search_web(query: str, max_results: int = 8) -> SearchResponse:
-    """
-    Search the web using Serper and return structured results.
-
-    Args:
-        query (str): The search query to execute.
-        max_results (int, optional): Max number of results to return.
-
-    Returns:
-        SearchResponse: Structured search result with hits and metadata.
-    """
-    try:
-        ws = WebSearcher()
-        response = ws.search(query, max_results)
-        return response
-    except Exception as e:
-        logger.error(f"Unhandled exception in search_web: {e}", exc_info=True)
-        return SearchResponse(
-            success=False,
-            query=query,
-            hits=[],
-            engine=None,
-            credits_used=None,
-            error=str(e),
         )

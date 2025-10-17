@@ -3,9 +3,8 @@ import time
 
 import justext
 import requests
-from agents import function_tool
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from readability import Document
 
 from common.config import get_logger
@@ -17,16 +16,9 @@ CONNECT_TIMEOUT = 5.0
 READ_TIMEOUT = 25.0
 
 
-class ScrapeRequest(BaseModel):
-    url: HttpUrl
-    max_chars: int = 30_000
-    sleep_ms: int = 200
-    allow_redirects: bool = True
-
-
 class ScrapeResult(BaseModel):
     ok: bool
-    final_url: HttpUrl | None = None
+    final_url: str | None = None
     status_code: int | None = None
     content_type: str | None = None
     title: str | None = None
@@ -37,7 +29,7 @@ class ScrapeResult(BaseModel):
     raw_html: str | None = None
 
 
-class WebsiteScraper:
+class WebScrapeService:
     """Web scraper with multiple extraction methods for robust content extraction.
 
     Example:
@@ -147,16 +139,18 @@ class WebsiteScraper:
                     start = end - overlap
         return out
 
-    def scrape(self, request: ScrapeRequest) -> ScrapeResult:
+    def scrape(
+        self, url: str, max_chars: int = 30_000, sleep_ms: int = 200, allow_redirects: bool = True
+    ) -> ScrapeResult:
         """Scrape a URL and extract text content using multiple extraction methods."""
-        if request.sleep_ms:
-            time.sleep(request.sleep_ms / 1000.0)
+        if sleep_ms:
+            time.sleep(sleep_ms / 1000.0)
 
         try:
             response = self.session.get(
-                str(request.url),
+                str(url),
                 timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
-                allow_redirects=request.allow_redirects,
+                allow_redirects=allow_redirects,
             )
         except requests.RequestException as e:
             return ScrapeResult(ok=False, error=str(e))
@@ -223,7 +217,7 @@ class WebsiteScraper:
             text = ""
 
         # Chunk
-        chunks = self._chunk_text(text, request.max_chars)
+        chunks = self._chunk_text(text, max_chars)
 
         total_words = sum(len(c.split()) for c in chunks)
 
@@ -238,57 +232,3 @@ class WebsiteScraper:
             word_count=total_words,
             raw_html=html,
         )
-
-
-@function_tool
-def scrape_website(url: str, max_chars: int = 30000, debug: bool = False) -> ScrapeResult:
-    """
-    Scrape a website and extract clean textual content.
-
-    This tool fetches the web page at `url` (following redirects),
-    then attempts to extract the main readable content using
-    multiple strategies (readability, jusText, fallback). It returns
-    a `ScrapeResult` with structured info about title, description,
-    text chunks, and metadata.
-
-    Args:
-        url (str): The URL to scrape (must include protocol, e.g. "https://...").
-        max_chars (int, optional): Maximum characters per chunk. Defaults to 30,000.
-        debug (bool, optional): If True, include raw_html in the result for debugging.
-
-    Returns:
-        ScrapeResult: A Pydantic model containing fields:
-            ok (bool),
-            final_url (HttpUrl | None),
-            status_code (int | None),
-            content_type (str | None),
-            title (str | None),
-            meta_description (str | None),
-            text_chunks (List[str]),
-            word_count (int),
-            error (str | None),
-            raw_html (str | None) — only populated if debug=True.
-    """
-    try:
-        scraper = WebsiteScraper()
-        req = ScrapeRequest(url=url, max_chars=max_chars)
-        res = scraper.scrape(req)
-    except Exception as e:
-        return ScrapeResult(
-            ok=False,
-            final_url=None,
-            status_code=None,
-            content_type=None,
-            title=None,
-            meta_description=None,
-            text_chunks=[],
-            word_count=0,
-            error=f"Internal exception in scrape_website: {e!r}",
-            raw_html=None,
-        )
-
-    # Optionally prune raw_html to reduce payload size when not debugging
-    if not debug:
-        res.raw_html = None
-
-    return res
