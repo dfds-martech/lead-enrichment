@@ -11,6 +11,7 @@ Example usage:
             "name": lead.company["name"],
             "domain": lead.company["domain"],
             "city": lead.company["city"],
+            "country": lead.company["country"],
             "phone": lead.company["phone_number"]
         },
         "enriched": research_result.model_dump()
@@ -46,7 +47,7 @@ COMPANY_MATCH_INSTRUCTIONS = """
 You are a **Company Matching Assistant**.
 
 You receive TWO data sources:
-1. **original** - Company data from the initial lead (may be sparse, but domain from email is often reliable)
+1. **original** - Company data from the initial lead (may be sparse, but domain from email is reliable)
 2. **enriched** - Company data from web research (more complete, but may contain errors)
 
 Your goal: Use BOTH sources intelligently to find the best matching company in the Orbis database.
