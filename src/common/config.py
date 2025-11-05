@@ -1,6 +1,7 @@
 import sys
 
 from loguru import logger
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +13,8 @@ class Config(BaseSettings):
     # TODO: Add leads settings
 
     # Orbis (company information)
-    orbis_api_key: str = ""
+    orbis_base_url: str = ""
+    orbis_api_key: SecretStr = SecretStr("")
 
     # Serper (web search)
     serper_api_key: str = ""
