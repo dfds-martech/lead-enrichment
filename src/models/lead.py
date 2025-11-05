@@ -4,7 +4,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from models.company import CompanyResearchQuery
+from models.company import CompanyResearchCriteria
 
 
 class LeadType(str, Enum):
@@ -185,13 +185,13 @@ class Lead(BaseModel):
         )
 
     @property
-    def company_research_query(self) -> CompanyResearchQuery:
+    def company_research_query(self) -> CompanyResearchCriteria:
         """Build a company research query from this lead."""
-        return CompanyResearchQuery(
+        return CompanyResearchCriteria(
             name=self.company.get("name"),
             domain=self.company.get("domain"),
             city=self.company.get("city"),
             country=self.company.get("country"),
-            country_code=self.company.get("country_alpha2"),
-            representative=self.user.get("full_name"),
+            phone=self.company.get("phone_number"),
+            representative=self.user.get("full_name") or None,
         )

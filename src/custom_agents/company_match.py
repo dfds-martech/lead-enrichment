@@ -29,7 +29,7 @@ from agents import Agent
 from pydantic import BaseModel, Field
 
 from common.config import config
-from services.orbis_service import OrbisMatch
+from services.orbis.schemas import OrbisCompanyMatch
 from tools.match_company import match_company
 
 
@@ -37,17 +37,22 @@ class CompanyMatchResult(BaseModel):
     """Result of matching a company in Orbis database."""
 
     matched: bool = Field(description="Whether a confident match was found")
-    match: OrbisMatch | None = Field(None, description="The selected Orbis match, if found")
+    match: OrbisCompanyMatch | None = Field(None, description="The selected Orbis match, if found")
     reasoning: str = Field(description="Explanation of match selection or why no match was found")
     total_candidates: int = Field(0, description="Total number of candidates considered")
     confidence: str = Field(description="Confidence level: 'high' (>0.9), 'medium' (0.7-0.9), 'low' (<0.7), or 'none'")
+
+    # Enriched fields not in Orbis
+    domain: str | None = Field(None, description="Domain from research if not available in Orbis")
+    industry: str | None = Field(None, description="Industry from research if not available in Orbis")
+    description: str | None = Field(None, description="Company description from research")
 
 
 COMPANY_MATCH_INSTRUCTIONS = """
 You are a **Company Matching Assistant**.
 
 You receive TWO data sources:
-1. **original** - Company data from the initial lead (may be sparse, but domain from email is reliable)
+1. **original** - Initial company data that may be sparse
 2. **enriched** - Company data from web research (more complete, but may contain errors)
 
 Your goal: Use BOTH sources intelligently to find the best matching company in the Orbis database.
@@ -65,7 +70,7 @@ Your goal: Use BOTH sources intelligently to find the best matching company in t
 
 3. **Location-based search** (fallback):
    - Use `enriched.city` + `enriched.country` + name (research likely verified these)
-   - Use `enriched.address` + `enriched.zip_code` if available
+   - Use `enriched.address` + `enriched.postal_code` if available
 
 4. **Handle multiple matches:**
    Disambiguate using these criteria (in priority order):
@@ -115,7 +120,7 @@ Your goal: Use BOTH sources intelligently to find the best matching company in t
     "country": "Jersey",
     "national_id": "123456",
     "address": "23 Hill Street",
-    "zip_code": "JE2 4UA"
+    "postal_code": "JE2 4UA"
   }
 }
 ```
@@ -123,7 +128,7 @@ Your goal: Use BOTH sources intelligently to find the best matching company in t
 
 
 def create_company_match_agent(model: str = config.openai_model) -> Agent[CompanyMatchResult]:
-    """Create an agent that matches companies using Orbis database.
+    """Creates an agent that can match company criteria using Orbis database.
 
     Args:
         model: The LLM model to use for the agent

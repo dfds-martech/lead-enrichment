@@ -2,7 +2,7 @@
 Web search agent
 
 Example usage:
-    query = CompanyResearchQuery(
+    criteria = CompanyResearchCriteria(
         name="WILDWINE LTD",
         domain="wildwine.com",
         city="London",
@@ -10,49 +10,18 @@ Example usage:
         representative="John Doe"
     )
     agent = create_company_research_agent()
+    input = criteria.to_prompt()
 
-    result = await Runner.run(
-        agent,
-        query.prompt
-    )
+    result = await Runner.run(agent, input)
 
 """
 
 from agents import Agent
-from pydantic import BaseModel, Field
 
 from common.config import config
+from models.company import CompanyResearchResult
 from tools.scrape_website import scrape_website
 from tools.search_web import search_web
-
-
-class CompanyResearchResult(BaseModel):
-    """Profile summary of a company as discovered by the research agent."""
-
-    domain: str | None = Field(None, description="Primary web domain / website host")
-    name: str | None = Field(None, description="Official company name")
-    address: str | None = Field(None, description="Registered address or headquarters location")
-    city: str | None = Field(None, description="City of the company")
-    zip_code: str | None = Field(None, description="Postal code code of the company")
-    country: str | None = Field(None, description="Country of the company")
-    national_id: str | None = Field(None, description="Official national company identifier (e.g. CVR, VAT, etc.)")
-    industry: str | None = Field(None, description="Industry or sector in which the company operates")
-    employee_count: int | None = Field(None, description="Number of employees (if available)")
-    revenue: str | None = Field(None, description="Annual revenue, in local currency or approximate (if available)")
-    description: str | None = Field(None, description="Short company description or summary")
-    reasoning: str | None = Field(
-        None,
-        description="Your reasoning or chain-of-thought for choices/values. Keep it short and concise.",
-    )
-    sources: list[str] = Field(default_factory=list, description="List of URLs from which you extracted information")
-
-    @property
-    def to_text(self) -> str:
-        out = ""
-        for field, value in self.model_dump().items():
-            out += f"{field}: {value}\n"
-        return out.strip()
-
 
 COMPANY_RESEARCH_INSTRUCTIONS = """
 You are a **Company Research Assistant**.
