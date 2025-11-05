@@ -4,9 +4,15 @@ FastAPI server for lead enrichment application.
 Deploy to Google Cloud Run.
 """
 
+# Load environment variables first
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
+
+from routes import enrichment, health
+
+load_dotenv()
 
 # Initialize
 app = FastAPI(
@@ -17,25 +23,9 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-
-@app.get("/")
-async def root():
-    """Root endpoint with basic info."""
-    return {
-        "service": "Lead Enrichment API",
-        "version": "0.1.0",
-        "status": "running",
-        "endpoints": {
-            "health": "/health",
-            "docs": "/docs",
-        },
-    }
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Cloud Run."""
-    return {"status": "healthy", "service": "lead-enrichment"}
+# Include routers
+app.include_router(health.router)
+app.include_router(enrichment.router)
 
 
 if __name__ == "__main__":

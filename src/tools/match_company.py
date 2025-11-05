@@ -1,7 +1,9 @@
 from agents import function_tool
 
 from common.config import get_logger
-from services.orbis_service import OrbisMatchResult, OrbisService
+from models.company import CompanyResearchCriteria
+from services.orbis.client import OrbisClient
+from services.orbis.schemas import OrbisCompanyMatch, OrbisMatchCompanyOptions
 
 logger = get_logger(__name__)
 
@@ -17,7 +19,7 @@ def match_company(
     national_id: str | None = None,
     phone: str | None = None,
     score_limit: float = 0.7,
-) -> OrbisMatchResult:
+) -> list[OrbisCompanyMatch]:
     """
     Search for company matches in the Orbis business database.
 
@@ -51,8 +53,8 @@ def match_company(
         - Lower score_limit (e.g., 0.6) returns more potential matches
     """
     try:
-        orbis = OrbisService()
-        result = orbis.match_company(
+        orbis_client = OrbisClient()
+        criteria = CompanyResearchCriteria(
             name=name,
             city=city,
             country=country,
@@ -61,10 +63,11 @@ def match_company(
             national_id=national_id,
             email_or_website=domain,
             phone_or_fax=phone,
-            score_limit=score_limit,
         )
-        return result
+        options = OrbisMatchCompanyOptions(score_limit=score_limit)
+        return orbis_client.company_match(criteria=criteria, options=options)
+
     except Exception as e:
         logger.error(f"Error in match_company tool: {e}", exc_info=True)
         # Return empty result on error
-        return OrbisMatchResult(hits=[], total_hits=0)
+        return []
