@@ -14,11 +14,10 @@ Example:
   test_client = AzureOpenAIService.create_custom_client(api_key="test_key")
 """
 
-import os
-
 from openai import AzureOpenAI, OpenAI
 
-from common.config import get_logger
+from common.config import config
+from common.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -52,7 +51,7 @@ class AzureOpenAIService:
 
     @classmethod
     def _create_client(cls, model: str) -> AzureOpenAI:
-        api_key = os.getenv("OPENAI_KEY")
+        api_key = config.openai_key
         if not api_key:
             raise ValueError("OPENAI_KEY environment variable is required")
 

@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel
 from readability import Document
 
-from common.config import get_logger
+from common.logging import get_logger
 
 logger = get_logger(__name__)
 

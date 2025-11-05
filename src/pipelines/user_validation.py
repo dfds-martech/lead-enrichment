@@ -7,7 +7,7 @@ Validates and checks quality of user-submitted data:
 - Phone number validation
 """
 
-from common.config import get_logger
+from common.logging import get_logger
 from models.enrichment import UserValidationResult
 from models.lead import Lead
 

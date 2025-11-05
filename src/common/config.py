@@ -1,14 +1,8 @@
-import sys
-
-from loguru import logger
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Config(BaseSettings):
-    # Orbis
-    # TODO: Add Orbis settings
-
     # Leads
     # TODO: Add leads settings
 
@@ -43,12 +37,3 @@ class Config(BaseSettings):
 
 
 config = Config()
-
-
-# Loguru config
-logger.remove()
-logger.add(sys.stderr, format=config.log_format, level=config.log_level, colorize=True)
-
-
-def get_logger(name: str | None = None):
-    return logger.bind(name=name) if name else logger

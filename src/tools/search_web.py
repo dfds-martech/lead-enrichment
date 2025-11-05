@@ -1,6 +1,6 @@
 from agents import function_tool
 
-from common.config import get_logger
+from common.logging import get_logger
 from services.web_search_service import SearchResult, WebSearchService
 
 logger = get_logger(__name__)

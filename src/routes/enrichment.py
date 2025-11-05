@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from common.config import get_logger
+from common.logging import get_logger
 from models.company import CompanyResearchCriteria
 from models.enrichment import CompanyEnrichmentResult
 from pipelines.company_enrichment import enrich_company

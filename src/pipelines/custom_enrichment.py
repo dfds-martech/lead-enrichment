@@ -11,7 +11,7 @@ Examples of future custom enrichment:
 - Competitive analysis
 """
 
-from common.config import get_logger
+from common.logging import get_logger
 from models.enrichment import CustomEnrichmentResult
 from models.lead import Lead
 

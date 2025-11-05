@@ -17,7 +17,7 @@ import asyncio
 import time
 from datetime import datetime
 
-from common.config import get_logger
+from common.logging import get_logger
 from models.enrichment import (
     CompanyEnrichmentResult,
     CustomEnrichmentResult,

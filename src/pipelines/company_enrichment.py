@@ -11,7 +11,7 @@ import json
 
 from agents import Runner
 
-from common.config import get_logger
+from common.logging import get_logger
 from custom_agents.company_match import CompanyMatchResult, create_company_match_agent
 from custom_agents.company_research import CompanyResearchResult, create_company_research_agent
 from models.company import CompanyResearchCriteria

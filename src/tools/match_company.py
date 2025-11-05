@@ -1,6 +1,6 @@
 from agents import function_tool
 
-from common.config import get_logger
+from common.logging import get_logger
 from models.company import CompanyResearchCriteria
 from services.orbis.client import OrbisClient
 from services.orbis.schemas import OrbisCompanyMatch, OrbisMatchCompanyOptions
