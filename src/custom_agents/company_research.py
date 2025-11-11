@@ -20,8 +20,9 @@ from agents import Agent
 
 from common.config import config
 from models.company import CompanyResearchResult
-from tools.scrape_website import scrape_website
-from tools.search_web import search_web
+from services.google_search.tools import google_search
+from services.serper_search.tools import search_web
+from services.web_scrape.tools import scrape_website
 
 COMPANY_RESEARCH_INSTRUCTIONS = """
 You are a **Company Research Assistant**.
@@ -72,7 +73,7 @@ def create_company_research_agent(model: str = config.openai_model) -> Agent[Com
         name="Company Research Assistant",
         instructions=COMPANY_RESEARCH_INSTRUCTIONS,
         output_type=CompanyResearchResult,
-        tools=[search_web, scrape_website],
+        tools=[search_web, google_search, scrape_website],
         model=model,
     )
 

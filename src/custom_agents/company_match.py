@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from common.config import config
 from services.orbis.schemas import OrbisCompanyMatch
-from tools.match_company import match_company
+from services.orbis.tools import match_company
 
 
 class CompanyMatchResult(BaseModel):
