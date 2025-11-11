@@ -1,6 +1,7 @@
 from agents import function_tool
 
-from services.web_scrape_service import ScrapeResult, WebScrapeService
+from services.web_scrape.client import WebScrapeService
+from services.web_scrape.schemas import ScrapeResult
 
 
 @function_tool
