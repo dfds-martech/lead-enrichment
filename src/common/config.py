@@ -6,16 +6,20 @@ class Config(BaseSettings):
     # Leads
     # TODO: Add leads settings
 
+    GOOGLE_SEARCH_ENGINE_ID: str = ""
+    GOOGLE_SEARCH_API_KEY: SecretStr = SecretStr("")
+
     # Orbis (company information)
     orbis_base_url: str = ""
     orbis_api_key: SecretStr = SecretStr("")
 
     # Serper (web search)
-    serper_api_key: str = ""
+    serper_base_url: str = "https://google.serper.dev/search"
+    serper_api_key: SecretStr = SecretStr("")
 
     # Segment (user profiles)
-    segment_api_key: str = ""
-    segment_space_id: str = ""
+    segment_api_key: SecretStr = SecretStr("")
+    segment_space_id: SecretStr = SecretStr("")
 
     # OpenAI
     azure_git_token: str = ""
