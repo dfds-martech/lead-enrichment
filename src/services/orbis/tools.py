@@ -52,6 +52,9 @@ def match_company(
         - Higher score_limit (e.g., 0.9) returns only high-confidence matches
         - Lower score_limit (e.g., 0.6) returns more potential matches
     """
+    logger.info(
+        f"Orbis match company tool called with name: {name}, domain: {domain}, city: {city}, country: {country}, address: {address}, postcode: {postcode}, national_id: {national_id}, phone: {phone}, score_limit: {score_limit}"
+    )
     try:
         orbis_client = OrbisClient()
         criteria = CompanyResearchCriteria(
