@@ -36,6 +36,9 @@ dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.30.0",
     "google-auth>=2.41.1",
+    "langdetect>=1.0.9",
+    "pycountry>=24.6.1",
+    "playwright>=1.56.0",
 ]
 
 [project.scripts]
