@@ -32,6 +32,7 @@ class AzureOpenAIService:
 
     DEFAULT_MODEL = "gpt-4.1-mini"
     AZURE_ENDPOINT = "https://cog-lead-qualification-002.openai.azure.com/"
+    # AZURE_ENDPOINT = "https://cog-dev-pace-llm.openai.azure.com/"
 
     _clients: dict[str, AzureOpenAI] = {}
 
