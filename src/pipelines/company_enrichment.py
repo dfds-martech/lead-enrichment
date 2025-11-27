@@ -59,14 +59,14 @@ async def match_company_in_orbis(
     logger.info("Matching company in Orbis database")
     match_agent = create_company_match_agent()
     match_input = {
-        "original": criteria.model_dump(indent=2, exclude_none=True),
-        "enriched": research_result.model_dump(indent=2, exclude_none=True),
+        "original": criteria.model_dump(exclude_none=True),
+        "enriched": research_result.model_dump(exclude_none=True),
     }
 
     run_result = await Runner.run(match_agent, json.dumps(match_input))
     result = run_result.final_output
 
-    logger.info(f"Match completed - matched: {result.matched}, confidence: {result.confidence}")
+    logger.info(f"Match completed - Confidence: {result.confidence}")
     return result
 
 
@@ -82,14 +82,18 @@ def fetch_company_details(bvd_id: str) -> OrbisCompanyDetails | None:
     """
     logger.info(f"Fetching company details for BvD ID: {bvd_id}")
     orbis_client = OrbisClient()
-    details = orbis_client.company_lookup_by_bvd(bvd_id)
+    try:
+        company_details = orbis_client.company_lookup_by_bvd(bvd_id)
+    except Exception as e:
+        logger.error(f"Error fetching company details: {e}", exc_info=True)
+        return None
 
-    if details:
-        logger.info(f"Details fetched - employees: {details.employees}, revenue: {details.operating_revenue}")
-    else:
+    if not company_details:
         logger.warning(f"Details fetch returned None for BvD ID: {bvd_id}")
+        return None
 
-    return details
+    logger.info(f"Details fetched: {company_details.name} (BvD ID: {company_details.bvd_id})")
+    return company_details
 
 
 async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichmentResult:
@@ -104,7 +108,7 @@ async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichment
     """
     research_result = None
     match_result = None
-    details = None
+    company_details = None
     error = None
 
     try:
@@ -115,8 +119,8 @@ async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichment
         match_result = await match_company_in_orbis(criteria, research_result)
 
         # Stage 3: Details (only if matched)
-        if match_result.matched and match_result.match and match_result.match.bvd_id:
-            details = fetch_company_details(match_result.match.bvd_id)
+        if match_result.company:
+            company_details = fetch_company_details(match_result.company.bvd_id)
 
         logger.info("Company enrichment completed successfully")
 
@@ -127,6 +131,6 @@ async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichment
     return CompanyEnrichmentResult(
         research=research_result,
         match=match_result,
-        details=details,
+        details=company_details,
         error=error,
     )
