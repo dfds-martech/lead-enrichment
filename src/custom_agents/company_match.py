@@ -25,31 +25,54 @@ Example usage:
     )
 """
 
+from typing import Literal
+
 from agents import Agent
 from pydantic import BaseModel, Field
 
 from common.config import config
 from services.orbis.schemas import OrbisCompanyMatch
-from services.orbis.tools import match_company
+from services.orbis.tools import orbis_match_company
+
+ConfidenceLevel = Literal["very_low", "low", "medium", "high", "very_high"]
 
 
 class CompanyMatchResult(BaseModel):
     """Result of matching a company in Orbis database."""
 
-    matched: bool = Field(description="Whether a confident match was found")
-    match: OrbisCompanyMatch | None = Field(None, description="The selected Orbis match, if found")
+    company: OrbisCompanyMatch | None = Field(None, description="The selected Orbis company match, if found")
     reasoning: str = Field(description="Explanation of match selection or why no match was found")
     total_candidates: int = Field(0, description="Total number of candidates considered")
-    confidence: str = Field(description="Confidence level: 'high' (>0.9), 'medium' (0.7-0.9), 'low' (<0.7), or 'none'")
+    confidence: ConfidenceLevel = Field(default="very_low", description="Confidence level of the match")
 
     # Enriched fields not in Orbis
     domain: str | None = Field(None, description="Domain from research if not available in Orbis")
     industry: str | None = Field(None, description="Industry from research if not available in Orbis")
     description: str | None = Field(None, description="Company description from research")
 
+    def inspect(self) -> str:
+        parts = [
+            "### CompanyMatchResult ###\n",
+            f"name: {self.company.name if self.company else 'No match'}",
+            f"bvd_id: {self.company.bvd_id if self.company else 'No match'}",
+            f"Industry: {self.industry or '-'}",
+            f"Domain: {self.domain or '-'}",
+            "",
+            f"score: {self.company.score if self.company else 'No match'}",
+            f"Confidence: {self.confidence}",
+            f"Total candidates considered: {self.total_candidates}",
+            "",
+            "\n[Reasoning]",
+            self.reasoning,
+            "",
+            "\n[Research]",
+            f"{self.description or '-'}",
+        ]
+        return "\n".join(line for line in parts if line)
+
 
 COMPANY_MATCH_INSTRUCTIONS = """
-You are a **Company Matching Assistant**.
+You are a helpful company matching assistant.
 
 You receive TWO data sources:
 1. **original** - Initial company data that may be sparse
@@ -87,15 +110,15 @@ Your goal: Use BOTH sources intelligently to find the best matching company in t
    - Document which input source (original vs enriched) led to the successful match
 
 **Return CompanyMatchResult:**
-- `matched`: true only if confident (score > 0.7 AND supporting evidence from domain/location/national_id)
-- `match`: The selected OrbisMatch object (or null if no confident match found)
+- `company`: The selected OrbisMatch object (or null if no confident match found)
 - `reasoning`: Document your search strategy, which sources you used, conflicts found, and how you resolved them
 - `total_candidates`: Total number of Orbis matches considered across all searches
 - `confidence`:
-  * "high" - score > 0.9 + domain/national_id match
-  * "medium" - score 0.7-0.9 + location match
-  * "low" - score < 0.7 or missing supporting evidence
-  * "none" - no match selected
+  * "very_high" - score > 0.9 + domain/national_id match
+  * "high" - score 0.7-0.9 + location match
+  * "medium" - score 0.5-0.7 + location match
+  * "low" - score < 0.5 or missing supporting evidence
+  * "very_low" - no match selected
 
 **Important rules:**
 - Prioritize precision over recall - better NO match than WRONG match
@@ -140,7 +163,7 @@ def create_company_match_agent(model: str = config.openai_model) -> Agent[Compan
         name="Company Matching Assistant",
         instructions=COMPANY_MATCH_INSTRUCTIONS,
         output_type=CompanyMatchResult,
-        tools=[match_company],
+        tools=[orbis_match_company],
         model=model,
     )
 
