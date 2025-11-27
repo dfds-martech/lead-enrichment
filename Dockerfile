@@ -1,4 +1,4 @@
-# Multi-stage build for optimal image size
+# Multi-stage build for optimal image size with Playwright support
 FROM python:3.12-slim-bookworm as builder
 
 WORKDIR /app
@@ -20,18 +20,27 @@ WORKDIR /app
 
 # Copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application source code
 COPY src ./src
 
+# Install Playwright browsers (Chromium only to save space)
+# --with-deps automatically installs all system dependencies needed for headless operation
+# This includes libnss3, libnspr4, libgbm1, fonts, ca-certificates, etc. (~300MB total)
+RUN playwright install chromium --with-deps
+
 # Set environment variables
 ENV PORT=8080 \
     PYTHONPATH=/app/src \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    ## NOTE: Playwright specific env vars (installed by playwright)
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Health check for Cloud Run
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=2)"
+# Create non-root user for security (Cloud Run best practice)
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 
 # Expose port
 EXPOSE 8080
