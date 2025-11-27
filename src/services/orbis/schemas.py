@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from common.logging import get_logger
 
@@ -114,18 +114,22 @@ class OrbisCompanyFinancials(BaseModel):
 
 
 class OrbisCompanyDetails(BaseModel):
-    bvd_id: str | None
-    orbis_id: str | None
-    country_code: str | None  # For convenience (also part of address)
-    national_id: list[dict] | None
-    name: str | None
-    address: OrbisCompanyAddress | None
-    consolidation_code: str | None  # C1 = Consolidated, C2 = Unconsolidated, etc.
-    nace_code: str | None  # Industry classification (NACE2 - 4 digits)
-    employees: float | None
-    legal_status: str | None
-    financials: OrbisCompanyFinancials | None
-    raw_data: dict | None
+    bvd_id: str | None = Field(None, description="BvD ID of the company")
+    orbis_id: str | None = Field(None, description="Orbis ID of the company")
+    country_code: str | None = Field(
+        None, description="Country code of the company"
+    )  # For convenience (also part of address)
+    national_id: list[dict] | None = Field(None, description="National ID of the company")
+    name: str | None = Field(None, description="Name of the company")
+    address: OrbisCompanyAddress | None = Field(None, description="Address of the company")
+    consolidation_code: str | None = Field(
+        None, description="Consolidation code of the company"
+    )  # C1 = Consolidated, C2 = Unconsolidated, etc.
+    nace_code: str | None = Field(None, description="Industry classification (NACE2 - 4 digits)")
+    employees: float | None = Field(None, description="Number of employees of the company")
+    legal_status: str | None = Field(None, description="Legal status of the company")
+    financials: OrbisCompanyFinancials | None = Field(None, description="Financials of the company")
+    raw_data: dict | None = Field(None, description="Raw data from the company")
 
     @staticmethod
     def from_dict(data: dict) -> "OrbisCompanyDetails":

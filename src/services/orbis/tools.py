@@ -9,7 +9,7 @@ logger = get_logger(__name__)
 
 
 @function_tool
-def match_company(
+def orbis_match_company(
     name: str,
     domain: str | None = None,
     city: str | None = None,

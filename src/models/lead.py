@@ -1,6 +1,7 @@
 import ast
 import json
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -90,7 +91,7 @@ class Lead(BaseModel):
 
     # Processed fields
     identifiers: dict
-    user: dict
+    contact: dict
     company: dict
     collection: dict
     delivery: dict
@@ -99,6 +100,51 @@ class Lead(BaseModel):
     # Raw data
     record: dict
     payload: dict
+
+    @classmethod
+    def from_event(cls, event: dict) -> "Lead":
+        """Build a Lead from a lead event."""
+
+        full_payload_str = event.get("lead", {}).get("fullPayload")
+        if isinstance(full_payload_str, str):
+            try:
+                payload = json.loads(full_payload_str)
+            except (json.JSONDecodeError, ValueError):
+                payload = {}
+        else:
+            payload = full_payload_str or {}
+
+        identifiers = _extract_identifiers_from_payload(event, payload)
+        company = _extract_company(event, identifiers)
+        contact = _extract_contact(event, payload)
+        collection = _extract_loading_point("collection", event, payload)
+        delivery = _extract_loading_point("delivery", event, payload)
+
+        # Quote details - need to extract form_title from payload or sourceName
+        form_title = payload.get("formTitle")
+        lead_type = FORM_TYPE_MAPPING.get(form_title) if form_title else None
+
+        quote = {
+            "form_title": form_title,
+            "form_locale": payload.get("formLocale"),
+        }
+        # Add form-specific fields from payload
+        for key, value in FORM_PAYLOAD_MAPPINGS.get(form_title, {}).items():
+            quote[key] = payload.get(value, None)
+
+        return cls(
+            type=lead_type,
+            created_on=event.get("eventDate"),
+            modified_on=event.get("eventDate"),
+            identifiers=identifiers,
+            contact=contact,
+            company=company,
+            collection=collection,
+            delivery=delivery,
+            quote=quote,
+            payload=payload,
+            record=event,
+        )
 
     @classmethod
     def from_crm(cls, record) -> "Lead":
@@ -121,7 +167,7 @@ class Lead(BaseModel):
         # User details
         first_name = payload.get("FirstName", "").strip()
         last_name = payload.get("LastName", "").strip()
-        user = {
+        contact = {
             "first_name": first_name,
             "last_name": last_name,
             "full_name": f"{first_name} {last_name}",
@@ -175,7 +221,7 @@ class Lead(BaseModel):
             created_on=record.get("createdon", None),
             modified_on=record.get("modifiedon", None),
             identifiers=identifiers,
-            user=user,
+            contact=contact,
             company=company,
             collection=collection,
             delivery=delivery,
@@ -191,7 +237,89 @@ class Lead(BaseModel):
             name=self.company.get("name"),
             domain=self.company.get("domain"),
             city=self.company.get("city"),
+            address=self.company.get("street"),
+            postcode=self.company.get("postal_code"),
             country=self.company.get("country"),
-            phone=self.company.get("phone_number"),
-            representative=self.user.get("full_name") or None,
+            phone_or_fax=self.identifiers.get("phone"),
+            representative=self.contact.get("full_name") or None,
         )
+
+
+def _extract_identifiers_from_payload(event: dict, payload: dict) -> dict:
+    """Extract user identifiers from the payload."""
+
+    contact = payload.get("contact", {})
+    phone_number = contact.get("phone", None)
+
+    # segment ids are potentially also stored in the 'userSegmentID' object
+    userSegmentID = payload.get("userSegmentID", {})
+    user_id = userSegmentID.get("userId", None)
+    anonymous_id = userSegmentID.get("anonymousUserId", None)
+
+    return {
+        "user_id": payload.get("segmentId", user_id) or None,
+        "anonymous_id": payload.get("anonymousSegmentId", anonymous_id) or None,
+        "email": payload.get("CompanyEmail", None),
+        "phone": payload.get("PhoneNumber", None) or phone_number,
+    }
+
+
+def _extract_contact(event: dict, payload: dict) -> dict:
+    """Extract user details from the payload."""
+    contact = event.get("contact", {})
+
+    # CRM extracts
+    contact_first_name = (contact.get("firstName") or "").strip()
+    contact_last_name = (contact.get("lastName") or "").strip()
+    contact_full_name = f"{contact_first_name} {contact_last_name}".strip()
+
+    # Form payload
+    form_first_name = (payload.get("FirstName") or "").strip()
+    form_last_name = (payload.get("LastName") or "").strip()
+    form_full_name = f"{form_first_name} {form_last_name}".strip()
+
+    # Priotize form payload over CRM extracts
+    return {
+        "first_name": form_first_name or contact_first_name or None,
+        "last_name": form_last_name or contact_last_name or None,
+        "full_name": form_full_name or contact_full_name or None,
+        "job_title": contact.get("jobTitle"),
+        "job_function": contact.get("jobFunction"),
+    }
+
+
+def _extract_company(event: dict, identifiers: dict) -> dict:
+    """Extract company details from the event."""
+    company = event.get("company", {})
+    address = company.get("address", {})
+    street_parts = [address.get("line1"), address.get("line2")]
+    street = ", ".join(part for part in street_parts if part)
+
+    email = identifiers.get("email")
+    domain = email.split("@")[1] if email else None
+
+    return {
+        "domain": domain,
+        "name": company.get("name", None),
+        "street": street or None,
+        "city": address.get("city", None),
+        "postal_code": address.get("postalCode", None),
+        "state": address.get("state", None),
+        "country": address.get("country", None),
+        "country_code": company.get("address1CountryAlpha2", None),  # TODO: to be added to event
+        "crm_account_id": company.get("crmAccountId", None),
+        "crm_account_type": company.get("type", None),
+        "crm_account_segment": company.get("segment", None),
+        "orbis_id": company.get("orbisId", None),
+    }
+
+
+def _extract_loading_point(point: Literal["collection", "delivery"], event: dict, payload: dict) -> dict:
+    """Extract collection point details from the event."""
+    lead = event.get("lead", {})
+
+    return {
+        "city": lead.get(f"{point}City", None),
+        "country": lead.get(f"{point}Country", None),  # TODO: to be added to event
+        "country_code": lead.get(f"{point}CountryCode", None),
+    }

@@ -32,10 +32,12 @@ class CompanyResearchCriteria(BaseModel):
         ]
 
         if self.representative:
-            lines.append(
-                "Notes:\n",
-                "The field 'representative' refers to the person who submitted or is associated with the lead, ",
-                "not the company itself.\n\n",
+            lines.extend(
+                [
+                    "\nNotes:",
+                    "The field 'representative' refers to the person who submitted or is associated with the lead, ",
+                    "not the company itself.\n\n",
+                ]
             )
 
         return "\n".join(lines)

@@ -61,10 +61,9 @@ async def scrape_website(
         return WebScraperResponse.from_scrape_result(result, max_chars, full_content)
 
     except Exception as e:
-        # Return error response in consistent format
         return WebScraperResponse(
             success=False,
             url=url,
             content="",
-            error=f"Internal exception: {e!r}",
+            error=f"Exception: {e!r}",
         )
