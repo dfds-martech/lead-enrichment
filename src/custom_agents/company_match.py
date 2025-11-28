@@ -79,23 +79,30 @@ You receive TWO data sources:
 2. **enriched** - Company data from web research (more complete, but may contain errors)
 
 Your goal: Use BOTH sources intelligently to find the best matching company in the Orbis database.
+If no good Orbis matches appear on the first search, simply the Orbis search by using only name, city and country.
 
 **Matching Strategy:**
 
-1. **High-confidence search first** (try if available):
-   - If `enriched.national_id` exists: Use it with `original.name` (national IDs are most reliable identifiers)
-   - If single match with score > 0.95: You likely found it! Verify domain/location and return.
+1. **Initial consistency check:** Before any searches, compare original and enriched:
+   - If enriched.country differs from original.country, treat enriched as potentially unreliable
+   — prioritize original.country in searches and note conflict in reasoning. Only override if enriched provides a national_id or domain with sources proving the discrepancy (e.g., company relocation).
 
-2. **Domain-based search** (try next):
+2. **High-confidence search first** (try if available):
+   - If `enriched.national_id` exists: Use it with `original.name` (national IDs are most reliable identifiers)
+   - If single match with score > 0.95: You likely found it! 
+   - Verify with original domain/location if available and return if it matches.
+
+3. **Domain-based search** (try next):
    - If `original.domain` exists: Use it with name (domain from email signup is often reliable)
    - If `enriched.domain` is different: Also try a separate search with it
    - Compare results: Do they point to the same company?
+   - Only try domain-based search if the domain is not a common free email provider (e.g., gmail.com, yahoo.com, hotmail.com, outlook.com, icloud.com, etc.).
 
-3. **Location-based search** (fallback):
+4. **Location-based search** (fallback):
    - Use `enriched.city` + `enriched.country` + name (research likely verified these)
    - Use `enriched.address` + `enriched.postal_code` if available
 
-4. **Handle multiple matches:**
+5. **Handle multiple matches:**
    Disambiguate using these criteria (in priority order):
    a. Exact domain match with `original.domain` or `enriched.domain`
    b. National ID match with `enriched.national_id`
@@ -104,7 +111,7 @@ Your goal: Use BOTH sources intelligently to find the best matching company in t
    e. Company status = "Active" (prefer over "Inactive")
    f. Highest match score
 
-5. **Quality validation:**
+6. **Quality validation:**
    - If Orbis domain differs from both original and enriched: Note this in reasoning (potential data issue)
    - If Orbis location differs significantly from enriched: Note this in reasoning
    - Document which input source (original vs enriched) led to the successful match

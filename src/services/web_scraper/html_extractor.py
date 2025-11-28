@@ -112,8 +112,12 @@ class HtmlExtractor:
 
             # Get accepted justext stoplist for language, fallback to English if not supported
             try:
-                stoplist = justext.get_stoplist(language_name)
-            except KeyError:
+                # Normalize language name - justext has issues with spaces and special chars
+                normalized_lang = language_name.replace(" ", "_") if language_name else "English"
+                stoplist = justext.get_stoplist(normalized_lang)
+            except (KeyError, ValueError):
+                # Fallback to English if language not supported or stoplist file missing
+                logger.debug(f"Language '{language_name}' not supported by justext, using English")
                 stoplist = justext.get_stoplist("English")
 
             paragraphs = justext.justext(html_bytes, stoplist)
