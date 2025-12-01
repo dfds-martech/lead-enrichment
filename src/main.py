@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from routes import enrichment, health
+from routes import enrichment, health, scrape
 
 load_dotenv()
 
@@ -26,6 +26,7 @@ app = FastAPI(
 # Include routers
 app.include_router(health.router)
 app.include_router(enrichment.router)
+app.include_router(scrape.router)
 
 
 if __name__ == "__main__":
