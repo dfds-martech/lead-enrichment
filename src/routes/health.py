@@ -77,14 +77,6 @@ async def debug_check():
         checks["azure_openai"]["client_created"] = False
         checks["azure_openai"]["error"] = f"{type(e).__name__}: {e}"
 
-    # try:
-    #     from agents import Agent, Runner
-    #     test_agent = Agent(name="test", instructions="Say hello")
-    #     result = await Runner.run(test_agent, "test")
-    #     checks["agent_test"] = {"success": True, "output_type": type(result.final_output).__name__}
-    # except Exception as e:
-    #     checks["agent_test"] = {"success": False, "error": f"{type(e).__name__}: {e}"}
-
     # Overall status
     all_env_set = all(v == "set" for v in checks["env_vars"].values())
     azure_ok = checks["azure_openai"].get("client_created", False)
@@ -92,3 +84,108 @@ async def debug_check():
 
     logger.info(f"Debug check result: {checks}")
     return checks
+
+
+@router.get("/health/test-llm")
+async def test_llm():
+    """Test actual LLM call to Azure OpenAI (without agents SDK)."""
+    from services.azure_openai_service import AzureOpenAIService
+
+    result = {
+        "status": "testing",
+        "client_creation": {},
+        "api_call": {},
+    }
+
+    # Step 1: Create client
+    try:
+        client = AzureOpenAIService.get_async_client()
+        result["client_creation"] = {"success": True}
+    except Exception as e:
+        result["client_creation"] = {"success": False, "error": f"{type(e).__name__}: {e!r}"}
+        result["status"] = "failed"
+        return result
+
+    # Step 2: Make a simple API call (not using agents SDK)
+    try:
+        response = await client.chat.completions.create(
+            model=config.openai_model,
+            messages=[{"role": "user", "content": "Say 'hello' and nothing else."}],
+            max_tokens=10,
+        )
+        result["api_call"] = {
+            "success": True,
+            "response_type": type(response).__name__,
+            "content": response.choices[0].message.content if response.choices else None,
+        }
+        result["status"] = "healthy"
+    except Exception as e:
+        result["api_call"] = {
+            "success": False,
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "error_repr": repr(e),
+        }
+        result["status"] = "failed"
+
+    logger.info(f"LLM test result: {result}")
+    return result
+
+
+@router.get("/health/test-agent")
+async def test_agent():
+    """Test the agents SDK with a minimal agent."""
+    from agents import Agent, OpenAIChatCompletionsModel, Runner
+
+    from services.azure_openai_service import AzureOpenAIService
+
+    result = {
+        "status": "testing",
+        "client_creation": {},
+        "agent_creation": {},
+        "agent_run": {},
+    }
+
+    # Step 1: Create client
+    try:
+        client = AzureOpenAIService.get_async_client()
+        result["client_creation"] = {"success": True}
+    except Exception as e:
+        result["client_creation"] = {"success": False, "error": f"{type(e).__name__}: {e!r}"}
+        result["status"] = "failed"
+        return result
+
+    # Step 2: Create model and agent
+    try:
+        model = OpenAIChatCompletionsModel(model=config.openai_model, openai_client=client)
+        agent = Agent(name="test-agent", instructions="Reply with exactly: OK", model=model)
+        result["agent_creation"] = {"success": True}
+    except Exception as e:
+        result["agent_creation"] = {"success": False, "error": f"{type(e).__name__}: {e!r}"}
+        result["status"] = "failed"
+        return result
+
+    # Step 3: Run agent
+    try:
+        logger.info("[test-agent] Running agent...")
+        run_result = await Runner.run(agent, "test")
+        logger.info(f"[test-agent] Run completed, result type: {type(run_result)}")
+        result["agent_run"] = {
+            "success": True,
+            "result_type": type(run_result).__name__,
+            "final_output_type": type(run_result.final_output).__name__,
+            "final_output": str(run_result.final_output)[:100],
+        }
+        result["status"] = "healthy"
+    except Exception as e:
+        logger.error(f"[test-agent] Run failed: {type(e).__name__}: {e!r}")
+        result["agent_run"] = {
+            "success": False,
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "error_repr": repr(e),
+        }
+        result["status"] = "failed"
+
+    logger.info(f"Agent test result: {result}")
+    return result
