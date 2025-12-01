@@ -68,22 +68,30 @@ class AzureOpenAIService:
     def _create_async_client(cls, model: str) -> AsyncAzureOpenAI:
         api_key = config.azure_openai_api_key.get_secret_value()
         if not api_key:
+            logger.error("[AzureOpenAI] AZURE_OPENAI_API_KEY is missing or empty")
             raise ValueError("AZURE_OPENAI_API_KEY environment variable is required")
 
         if model not in cls.MODELS_API_VERSIONS:
             available = ", ".join(cls.MODELS_API_VERSIONS.keys())
+            logger.error(f"[AzureOpenAI] Unknown model '{model}'. Available: {available}")
             raise ValueError(f"Unknown model '{model}'. Available models: {available}")
+
+        endpoint = config.azure_openai_endpoint
+        api_version = cls.MODELS_API_VERSIONS[model]
+        logger.info(
+            f"[AzureOpenAI] Creating async client - model: {model}, endpoint: {endpoint}, api_version: {api_version}"
+        )
 
         return AsyncAzureOpenAI(
             api_key=api_key,
-            api_version=cls.MODELS_API_VERSIONS[model],
-            azure_endpoint=config.azure_openai_endpoint,
+            api_version=api_version,
+            azure_endpoint=endpoint,
         )
 
     @classmethod
     def get_async_client(cls, model: str = DEFAULT_MODEL) -> AsyncAzureOpenAI:
         """
-        Get async Azure OpenAI client for specified model (cached).
+        Get async Azure OpenAI client for specified model (cached)
         Use this for agents SDK and async operations.
         """
         logger.info(f"Getting async client for model: {model}")

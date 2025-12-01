@@ -32,41 +32,77 @@ async def research_company(criteria: CompanyResearchCriteria) -> CompanyResearch
     Returns:
         CompanyResearchResult with enriched company data
     """
-    logger.info(f"Researching company: {criteria.name}")
-    research_agent = create_company_research_agent()
+    logger.info(f"[Research] Starting for: {criteria.name}")
+
+    try:
+        research_agent = create_company_research_agent()
+        logger.debug("[Research] Agent created successfully")
+    except Exception as e:
+        logger.error(f"[Research] Failed to create agent: {type(e).__name__}: {e}")
+        raise
+
     research_input = criteria.to_prompt()
+    logger.debug(f"[Research] Input prompt length: {len(research_input)} chars")
 
-    run_result = await Runner.run(research_agent, research_input)
+    try:
+        logger.debug("[Research] Calling Runner.run()...")
+        run_result = await Runner.run(research_agent, research_input)
+        logger.debug(f"[Research] Runner.run() completed, result type: {type(run_result)}")
+    except Exception as e:
+        logger.error(f"[Research] Runner.run() failed: {type(e).__name__}: {e!r}")
+        raise
+
     result = run_result.final_output
+    if result is None:
+        logger.error("[Research] final_output is None")
+        raise ValueError("Research agent returned None")
 
-    logger.info(f"Research completed - domain: {result.domain}, national_id: {result.national_id}")
+    logger.info(f"[Research] Completed - domain: {result.domain}, national_id: {result.national_id}")
     return result
 
 
 async def match_company_in_orbis(
-    criteria: CompanyResearchCriteria, research_result: CompanyResearchResult
+    criteria: CompanyResearchCriteria, research_result: CompanyResearchResult | None
 ) -> CompanyMatchResult:
     """
     Stage 2: Match company in Orbis database.
 
     Args:
         criteria: Original company criteria
-        research_result: Enriched research data
+        research_result: Enriched research data (can be None if research failed)
 
     Returns:
         CompanyMatchResult with match information
     """
-    logger.info("Matching company in Orbis database")
-    match_agent = create_company_match_agent()
+    logger.info(f"[Match] Starting for: {criteria.name}")
+
+    try:
+        match_agent = create_company_match_agent()
+        logger.debug("[Match] Agent created successfully")
+    except Exception as e:
+        logger.error(f"[Match] Failed to create agent: {type(e).__name__}: {e}")
+        raise
+
     match_input = {
         "original": criteria.model_dump(exclude_none=True),
-        "enriched": research_result.model_dump(exclude_none=True),
+        "enriched": research_result.model_dump(exclude_none=True) if research_result else {},
     }
+    logger.debug(f"[Match] Input has enriched data: {research_result is not None}")
 
-    run_result = await Runner.run(match_agent, json.dumps(match_input))
+    try:
+        logger.debug("[Match] Calling Runner.run()...")
+        run_result = await Runner.run(match_agent, json.dumps(match_input))
+        logger.debug(f"[Match] Runner.run() completed, result type: {type(run_result)}")
+    except Exception as e:
+        logger.error(f"[Match] Runner.run() failed: {type(e).__name__}: {e!r}")
+        raise
+
     result = run_result.final_output
+    if result is None:
+        logger.error("[Match] final_output is None")
+        raise ValueError("Match agent returned None")
 
-    logger.info(f"Match completed - Confidence: {result.confidence}")
+    logger.info(f"[Match] Completed - Confidence: {result.confidence}")
     return result
 
 
@@ -100,6 +136,9 @@ async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichment
     """
     Run company enrichment through all stages.
 
+    Research failures are non-fatal - the pipeline continues with original criteria.
+    Match/Details failures are captured in the error field.
+
     Args:
         criteria: CompanyResearchCriteria with company information to enrich
 
@@ -112,21 +151,35 @@ async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichment
     error = None
 
     try:
-        # Stage 1: Research
-        research_result = await research_company(criteria)
+        # Stage 1: Research (best effort - failures don't stop the pipeline)
+        try:
+            research_result = await research_company(criteria)
+        except Exception as e:
+            logger.warning(f"[Enrichment] Research failed, continuing: {type(e).__name__}: {e!r}")
 
         # Stage 2: Match
         match_result = await match_company_in_orbis(criteria, research_result)
 
         # Stage 3: Details (only if matched)
         if match_result.company:
+            logger.debug(f"[Enrichment] Fetching details for BvD ID: {match_result.company.bvd_id}")
             company_details = fetch_company_details(match_result.company.bvd_id)
 
-        logger.info("Company enrichment completed successfully")
+        logger.info("[Enrichment] Completed successfully")
 
     except Exception as e:
-        logger.error(f"Error in company enrichment: {e}", exc_info=True)
-        error = str(e)
+        # Log full exception details for debugging
+        logger.error(
+            f"[Enrichment] Failed: {type(e).__name__}: {e!r}",
+            exc_info=True,
+            extra={
+                "error_type": type(e).__name__,
+                "error_str": str(e),
+                "error_repr": repr(e),
+                "company_name": criteria.name,
+            },
+        )
+        error = f"{type(e).__name__}: {e}"
 
     return CompanyEnrichmentResult(
         research=research_result,

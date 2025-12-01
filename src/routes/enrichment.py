@@ -39,15 +39,27 @@ async def enrich_company_endpoint(criteria: CompanyResearchCriteria):
         }
         ```
     """
+    company_name = criteria.name
+    logger.info(f"Starting enrichment for: {company_name}")
+
     try:
-        logger.debug(f"Enrichment criteria\n: {criteria.model_dump_json(indent=2, exclude_none=True)}")
+        result = await enrich_company(criteria)
 
-        enrichment_result = await enrich_company(criteria)
+        if result.error:
+            logger.warning(f"Enrichment completed with errors: {result.error}")
 
-        logger.info(f"Enrichment completed\n: {enrichment_result.model_dump_json(indent=2, exclude_none=True)}")
+        logger.info(
+            f"Enrichment completed for {company_name}",
+            extra={
+                "has_research": result.research is not None,
+                "has_match": result.match is not None,
+                "has_details": result.details is not None,
+            },
+        )
 
-        return enrichment_result
+        return result
 
     except Exception as e:
-        logger.error(f"Enrichment request failed for {criteria.name}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Enrichment failed: {str(e)}") from e
+        error_msg = f"{type(e).__name__}: {e}"
+        logger.error(f"Enrichment failed for {company_name}: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Enrichment failed: {error_msg}") from e
