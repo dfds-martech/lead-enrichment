@@ -23,8 +23,8 @@ class Config(BaseSettings):
 
     # OpenAI
     azure_git_token: str = ""
-    openai_key: str = ""
-    openai_endpoint: str = "https://cog-lead-qualification-002.openai.azure.com/"
+    azure_openai_api_key: SecretStr = SecretStr("")
+    azure_openai_endpoint: str = ""
     openai_model: str = "gpt-4.1-mini"
 
     # LLM settings

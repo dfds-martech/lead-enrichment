@@ -16,10 +16,11 @@ Example usage:
 
 """
 
-from agents import Agent
+from agents import Agent, OpenAIChatCompletionsModel
 
 from common.config import config
 from models.company import CompanyResearchResult
+from services.azure_openai_service import AzureOpenAIService
 from services.google_search.tools import google_search
 from services.serper_search.tools import search_web
 from services.web_scraper.tools import scrape_website
@@ -42,7 +43,7 @@ Note on sparse or ambiguous inputs: If the name is partial, incomplete, or commo
 
 You may use two tools: search_web (to get search hits) and scrape_website (to fetch page text). Use them strategically:
 
-1. If the provided domain does not appear to be a free email provider, pay a direct visit to the company's website to get the most up-to-date information. 
+1. If the provided domain does not appear to be a free email provider, pay a direct visit to the company's website to get the most up-to-date information.
    - {domain}
    Otherwise, skip this and focus on searches to identify the official domain.
 
@@ -89,12 +90,21 @@ json
 
 
 def create_company_research_agent(model: str = config.openai_model) -> Agent[CompanyResearchResult]:
+    # Get async Azure OpenAI client for agents SDK
+    azure_client = AzureOpenAIService.get_async_client(model=model)
+
+    # Create model with explicit async client
+    azure_model = OpenAIChatCompletionsModel(
+        model=model,
+        openai_client=azure_client,
+    )
+
     agent = Agent[CompanyResearchResult](
         name="Company Research Assistant",
         instructions=COMPANY_RESEARCH_INSTRUCTIONS,
         output_type=CompanyResearchResult,
         tools=[search_web, google_search, scrape_website],
-        model=model,
+        model=azure_model,
     )
 
     return agent

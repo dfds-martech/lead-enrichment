@@ -7,12 +7,16 @@ Deploy to Google Cloud Run.
 # Load environment variables first
 import os
 
+from agents import set_tracing_disabled
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from routes import enrichment, health, scrape
 
 load_dotenv()
+
+# Disable OpenAI agents SDK tracing (as we are using azure openai)
+set_tracing_disabled(disabled=True)
 
 # Initialize
 app = FastAPI(

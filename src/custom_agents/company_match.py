@@ -27,10 +27,11 @@ Example usage:
 
 from typing import Literal
 
-from agents import Agent
+from agents import Agent, OpenAIChatCompletionsModel
 from pydantic import BaseModel, Field
 
 from common.config import config
+from services.azure_openai_service import AzureOpenAIService
 from services.orbis.schemas import OrbisCompanyMatch
 from services.orbis.tools import orbis_match_company
 
@@ -89,7 +90,7 @@ If no good Orbis matches appear on the first search, simply the Orbis search by 
 
 2. **High-confidence search first** (try if available):
    - If `enriched.national_id` exists: Use it with `original.name` (national IDs are most reliable identifiers)
-   - If single match with score > 0.95: You likely found it! 
+   - If single match with score > 0.95: You likely found it!
    - Verify with original domain/location if available and return if it matches.
 
 3. **Domain-based search** (try next):
@@ -158,20 +159,23 @@ If no good Orbis matches appear on the first search, simply the Orbis search by 
 
 
 def create_company_match_agent(model: str = config.openai_model) -> Agent[CompanyMatchResult]:
-    """Creates an agent that can match company criteria using Orbis database.
+    """Creates an agent that can match company criteria using Orbis database."""
 
-    Args:
-        model: The LLM model to use for the agent
+    # Get async Azure OpenAI client for agents SDK
+    azure_client = AzureOpenAIService.get_async_client(model=model)
 
-    Returns:
-        Agent configured for company matching
-    """
+    # Create model with explicit async client
+    azure_model = OpenAIChatCompletionsModel(
+        model=model,
+        openai_client=azure_client,
+    )
+
     agent = Agent[CompanyMatchResult](
         name="Company Matching Assistant",
         instructions=COMPANY_MATCH_INSTRUCTIONS,
         output_type=CompanyMatchResult,
         tools=[orbis_match_company],
-        model=model,
+        model=azure_model,
     )
 
     return agent

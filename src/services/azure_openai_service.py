@@ -4,17 +4,16 @@ Simple AzureOpenAI service
 Example:
   from services.azure_openai_service import AzureOpenAIService
 
-  # Default client (gpt-4o-mini)
+  # Sync client (for regular OpenAI API calls)
   client = AzureOpenAIService.get_client()
-
-  # Specific model
   client = AzureOpenAIService.get_client(model="gpt-4.1-mini")
 
-  # Custom client for testing
-  test_client = AzureOpenAIService.create_custom_client(api_key="test_key")
+  # Async client (for agents SDK and async operations)
+  async_client = AzureOpenAIService.get_async_client()
+  async_client = AzureOpenAIService.get_async_client(model="gpt-4.1-mini")
 """
 
-from openai import AzureOpenAI, OpenAI
+from openai import AsyncAzureOpenAI, AzureOpenAI, OpenAI
 
 from common.config import config
 from common.logging import get_logger
@@ -26,15 +25,14 @@ logger = get_logger(__name__)
 
 class AzureOpenAIService:
     MODELS_API_VERSIONS: dict[str, str] = {
-        "gpt-4o-mini": "2024-12-01-preview",  # 2024-12-01-preview
-        "gpt-4.1-mini": "2025-01-01-preview",
+        "gpt-4o-mini": "2025-03-01-preview",  # "2024-12-01-preview",  # 2024-12-01-preview
+        "gpt-4.1-mini": "2025-03-01-preview",  # "2025-01-01-preview",
     }
 
     DEFAULT_MODEL = "gpt-4.1-mini"
-    # AZURE_ENDPOINT = "https://cog-lead-qualification-002.openai.azure.com/"
-    AZURE_ENDPOINT = "https://cog-dev-pace-llm.openai.azure.com/"
 
     _clients: dict[str, AzureOpenAI] = {}
+    _async_clients: dict[str, AsyncAzureOpenAI] = {}
 
     @classmethod
     def get_client(cls, model: str = DEFAULT_MODEL) -> AzureOpenAI | OpenAI:
@@ -52,9 +50,9 @@ class AzureOpenAIService:
 
     @classmethod
     def _create_client(cls, model: str) -> AzureOpenAI:
-        api_key = config.openai_key
+        api_key = config.azure_openai_api_key.get_secret_value()
         if not api_key:
-            raise ValueError("OPENAI_KEY environment variable is required")
+            raise ValueError("AZURE_OPENAI_API_KEY environment variable is required")
 
         if model not in cls.MODELS_API_VERSIONS:
             available = ", ".join(cls.MODELS_API_VERSIONS.keys())
@@ -63,8 +61,37 @@ class AzureOpenAIService:
         return AzureOpenAI(
             api_key=api_key,
             api_version=cls.MODELS_API_VERSIONS[model],
-            azure_endpoint=cls.AZURE_ENDPOINT,
+            azure_endpoint=config.azure_openai_endpoint,
         )
+
+    @classmethod
+    def _create_async_client(cls, model: str) -> AsyncAzureOpenAI:
+        api_key = config.azure_openai_api_key.get_secret_value()
+        if not api_key:
+            raise ValueError("AZURE_OPENAI_API_KEY environment variable is required")
+
+        if model not in cls.MODELS_API_VERSIONS:
+            available = ", ".join(cls.MODELS_API_VERSIONS.keys())
+            raise ValueError(f"Unknown model '{model}'. Available models: {available}")
+
+        return AsyncAzureOpenAI(
+            api_key=api_key,
+            api_version=cls.MODELS_API_VERSIONS[model],
+            azure_endpoint=config.azure_openai_endpoint,
+        )
+
+    @classmethod
+    def get_async_client(cls, model: str = DEFAULT_MODEL) -> AsyncAzureOpenAI:
+        """
+        Get async Azure OpenAI client for specified model (cached).
+        Use this for agents SDK and async operations.
+        """
+        logger.info(f"Getting async client for model: {model}")
+
+        if model not in cls._async_clients:
+            cls._async_clients[model] = cls._create_async_client(model)
+
+        return cls._async_clients[model]
 
     @classmethod
     def get_available_models(cls) -> list[str]:
@@ -72,4 +99,6 @@ class AzureOpenAIService:
 
     @classmethod
     def clear_cache(cls) -> None:
+        """Clear both sync and async client caches."""
         cls._clients.clear()
+        cls._async_clients.clear()
