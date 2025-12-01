@@ -10,6 +10,13 @@ Orchestrates the 3-stage company enrichment process:
 import json
 
 from agents import Runner
+from openai import (
+    APIConnectionError,
+    APIError,
+    AuthenticationError,
+    PermissionDeniedError,
+    RateLimitError,
+)
 
 from common.logging import get_logger
 from custom_agents.company_match import CompanyMatchResult, create_company_match_agent
@@ -20,6 +27,26 @@ from services.orbis.client import OrbisClient
 from services.orbis.schemas import OrbisCompanyDetails
 
 logger = get_logger(__name__)
+
+
+def _format_openai_error(e: Exception) -> str:
+    """Extract a clean error message from OpenAI SDK exceptions."""
+    error_type = type(e).__name__
+
+    # Handle OpenAI-specific errors with better messages
+    if isinstance(e, PermissionDeniedError):
+        return f"Azure OpenAI access denied: {e.message}"
+    elif isinstance(e, AuthenticationError):
+        return f"Azure OpenAI authentication failed: {e.message}"
+    elif isinstance(e, RateLimitError):
+        return f"Azure OpenAI rate limit exceeded: {e.message}"
+    elif isinstance(e, APIConnectionError):
+        return f"Cannot connect to Azure OpenAI: {e.message}"
+    elif isinstance(e, APIError):
+        return f"Azure OpenAI API error ({e.status_code}): {e.message}"
+
+    # For other exceptions, return type and message
+    return f"{error_type}: {e}"
 
 
 async def research_company(criteria: CompanyResearchCriteria) -> CompanyResearchResult:
@@ -48,6 +75,10 @@ async def research_company(criteria: CompanyResearchCriteria) -> CompanyResearch
         logger.debug("[Research] Calling Runner.run()...")
         run_result = await Runner.run(research_agent, research_input)
         logger.debug(f"[Research] Runner.run() completed, result type: {type(run_result)}")
+    except (PermissionDeniedError, AuthenticationError, RateLimitError, APIConnectionError, APIError) as e:
+        error_msg = _format_openai_error(e)
+        logger.error(f"[Research] OpenAI API error: {error_msg}")
+        raise RuntimeError(error_msg) from e
     except Exception as e:
         logger.error(f"[Research] Runner.run() failed: {type(e).__name__}: {e!r}")
         raise
@@ -93,6 +124,10 @@ async def match_company_in_orbis(
         logger.debug("[Match] Calling Runner.run()...")
         run_result = await Runner.run(match_agent, json.dumps(match_input))
         logger.debug(f"[Match] Runner.run() completed, result type: {type(run_result)}")
+    except (PermissionDeniedError, AuthenticationError, RateLimitError, APIConnectionError, APIError) as e:
+        error_msg = _format_openai_error(e)
+        logger.error(f"[Match] OpenAI API error: {error_msg}")
+        raise RuntimeError(error_msg) from e
     except Exception as e:
         logger.error(f"[Match] Runner.run() failed: {type(e).__name__}: {e!r}")
         raise
@@ -166,6 +201,11 @@ async def enrich_company(criteria: CompanyResearchCriteria) -> CompanyEnrichment
             company_details = fetch_company_details(match_result.company.bvd_id)
 
         logger.info("[Enrichment] Completed successfully")
+
+    except (PermissionDeniedError, AuthenticationError, RateLimitError, APIConnectionError, APIError) as e:
+        # Handle OpenAI errors with clear messages
+        error = _format_openai_error(e)
+        logger.error(f"[Enrichment] OpenAI API error: {error}", exc_info=True)
 
     except Exception as e:
         # Log full exception details for debugging
