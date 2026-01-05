@@ -3,6 +3,7 @@ Simple Service for interacting with the CRM test data.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -65,21 +66,22 @@ class CRMService:
         last_name = record.get("lastname") or payload.get("LastName")
 
         return {
-            "recordId": record.get("leadid"),
-            "crmEventType": "Lead update",
-            "eventDate": record.get("modifiedon") or record.get("createdon"),
-            "eventSource": "D365 Sales",
+            "eventId": "some-azure-service-bus-event-id",
+            "eventType": "lead.updated",
+            "eventVersion": "1.0",
+            "eventTimestamp": record.get("modifiedon") or record.get("createdon") or datetime.now().isoformat(),
+            "sourceSystem": "d365-sales",
             "entityType": "Lead",
             "contact": {
                 "crmId": record.get("_contactid_value"),
                 "cdpId": cdp_id,
-                "DFDS Id": None,
-                "emailAddress1": email,
+                "dfdsId": None,
+                "email": email,
                 "firstName": first_name,
+                "lastName": last_name,
                 "jobTitle": record.get("jobtitle"),
                 "jobFunction": record.get("dfds_jobfunction"),
-                "lastName": last_name,
-                "telephone1": phone,
+                "phone": phone,
             },
             "company": {
                 "crmAccountId": record.get("_accountid_value"),
