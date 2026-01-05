@@ -158,7 +158,7 @@ class Lead(BaseModel):
 
         # User identifiers
         identifiers = {
-            "user_id": userSegmentID.get("UserId", None),
+            "user_id": userSegmentID.get("dfdsUserId", None),
             "anonymous_id": userSegmentID.get("anonymousUserId", None),
             "email": company_email,
             "phone": phone_number,
