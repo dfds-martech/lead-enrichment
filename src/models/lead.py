@@ -103,7 +103,7 @@ class Lead(BaseModel):
 
     @classmethod
     def from_event(cls, event: dict) -> "Lead":
-        """Build a Lead from a lead event."""
+        """Build a Lead from an incoming lead event."""
 
         full_payload_str = event.get("lead", {}).get("fullPayload")
         if isinstance(full_payload_str, str):
@@ -117,8 +117,8 @@ class Lead(BaseModel):
         identifiers = _extract_identifiers_from_payload(event, payload)
         company = _extract_company(event, identifiers)
         contact = _extract_contact(event, payload)
-        collection = _extract_loading_point("collection", event, payload)
-        delivery = _extract_loading_point("delivery", event, payload)
+        collection = _extract_loading_point("collection", event)
+        delivery = _extract_loading_point("delivery", event)
 
         # Quote details - need to extract form_title from payload or sourceName
         form_title = payload.get("formTitle")
@@ -240,6 +240,7 @@ class Lead(BaseModel):
             address=self.company.get("street"),
             postcode=self.company.get("postal_code"),
             country=self.company.get("country"),
+            country_code=self.company.get("country_code"),
             phone_or_fax=self.identifiers.get("phone"),
             representative=self.contact.get("full_name") or None,
         )
@@ -306,7 +307,7 @@ def _extract_company(event: dict, identifiers: dict) -> dict:
         "postal_code": address.get("postalCode", None),
         "state": address.get("state", None),
         "country": address.get("country", None),
-        "country_code": company.get("address1CountryAlpha2", None),  # TODO: to be added to event
+        "country_code": address.get("country_code", None),
         "crm_account_id": company.get("crmAccountId", None),
         "crm_account_type": company.get("type", None),
         "crm_account_segment": company.get("segment", None),
@@ -314,12 +315,12 @@ def _extract_company(event: dict, identifiers: dict) -> dict:
     }
 
 
-def _extract_loading_point(point: Literal["collection", "delivery"], event: dict, payload: dict) -> dict:
+def _extract_loading_point(point: Literal["collection", "delivery"], event: dict) -> dict:
     """Extract collection point details from the event."""
     lead = event.get("lead", {})
 
     return {
         "city": lead.get(f"{point}City", None),
-        "country": lead.get(f"{point}Country", None),  # TODO: to be added to event
+        "country": lead.get(f"{point}Country", None),
         "country_code": lead.get(f"{point}CountryCode", None),
     }

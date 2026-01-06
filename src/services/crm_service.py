@@ -27,7 +27,8 @@ class CRMService:
 
     def get_record(self, index):
         record = self.leads.iloc[index].to_dict()
-        return {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        transform_record = {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        return dict(sorted(transform_record.items()))
 
     def get_form(self, index):
         form = self.get_record(index)["dfds_fullpayload"]
@@ -96,7 +97,7 @@ class CRMService:
                     "postalCode": record.get("address1_postalcode"),
                     "state": record.get("address1_stateorprovince"),
                     "country": country_lookup.name if country_lookup else None,
-                    "country_code": country_lookup.alpha2 if country_lookup else None,  # TODO: to be added to event
+                    "country_code": country_lookup.alpha2 if country_lookup else None,
                 },
             },
             "lead": {
@@ -105,9 +106,11 @@ class CRMService:
                 "requestNumber": record.get("dfds_requestnumber"),
                 "description": payload.get("DescribeYourCargo"),
                 "collectionCity": record.get("dfds_collectioncity"),
-                "collectionCountry": collection_country.alpha2 if collection_country else None,
+                "collectionCountry": collection_country.name if collection_country else None,
+                "collectionCountryCode": collection_country.alpha2 if collection_country else None,
                 "deliveryCity": record.get("dfds_deliverycity"),
-                "deliveryCountry": delivery_country.alpha2 if delivery_country else None,
+                "deliveryCountry": delivery_country.name if delivery_country else None,
+                "deliveryCountryCode": delivery_country.alpha2 if delivery_country else None,
                 "quoteNotes": record.get("dfds_quotenotes"),
                 "requestType": record.get("dfds_requesttype"),
                 "sourceName": record.get("dfds_sourcename"),
@@ -115,6 +118,6 @@ class CRMService:
                 "state": record.get("state"),
                 "status": record.get("status"),
                 "subject": record.get("subject"),
-                "fullPayload": record.get("dfds_fullpayload"),  # TODO: to be added to event
+                "fullPayload": record.get("dfds_fullpayload"),
             },
         }

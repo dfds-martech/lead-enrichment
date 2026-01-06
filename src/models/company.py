@@ -10,6 +10,7 @@ class CompanyResearchCriteria(BaseModel):
     domain: str | None = Field(None, description="Primary web domain / website host")
     city: str | None = Field(None, description="City of the company")
     country: str | None = Field(None, description="Country of the company")
+    country_code: str | None = Field(None, description="Country code of the company")
     address: str | None = Field(None, description="Address of the company")
     postcode: str | None = Field(None, description="Postcode of the company")
     national_id: str | None = Field(None, description="National ID of the company")
