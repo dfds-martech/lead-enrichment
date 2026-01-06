@@ -21,6 +21,10 @@ class Config(BaseSettings):
     segment_api_key: SecretStr = SecretStr("")
     segment_space_id: SecretStr = SecretStr("")
 
+    # Service Bus
+    service_bus_connection_string: SecretStr = SecretStr("")
+    service_bus_topic_name: str = "lead-events"
+
     # OpenAI
     azure_git_token: str = ""
     azure_openai_api_key: SecretStr = SecretStr("")
