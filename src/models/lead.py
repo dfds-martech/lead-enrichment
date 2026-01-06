@@ -90,6 +90,7 @@ class Lead(BaseModel):
     modified_on: str | None = None
 
     # Processed fields
+    id: str
     identifiers: dict
     contact: dict
     company: dict
@@ -133,6 +134,7 @@ class Lead(BaseModel):
             quote[key] = payload.get(value, None)
 
         return cls(
+            id=event.get("lead", {}).get("crmLeadId", "UNKNOWN_LEAD_ID"),
             type=lead_type,
             created_on=event.get("eventDate"),
             modified_on=event.get("eventDate"),
@@ -231,7 +233,7 @@ class Lead(BaseModel):
         )
 
     @property
-    def company_research_query(self) -> CompanyResearchCriteria:
+    def company_research_criteria(self) -> CompanyResearchCriteria:
         """Build a company research query from this lead."""
         return CompanyResearchCriteria(
             name=self.company.get("name"),
