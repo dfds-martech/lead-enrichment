@@ -39,6 +39,7 @@ dependencies = [
     "langdetect>=1.0.9",
     "pycountry>=24.6.1",
     "playwright>=1.56.0",
+    "azure-servicebus>=7.14.3",
 ]
 
 [project.scripts]
