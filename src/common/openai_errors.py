@@ -4,8 +4,9 @@ OpenAI error handling utilities.
 Provides a context manager for consistent error handling across
 all OpenAI API operations in the enrichment pipeline.
 """
+
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from openai import (
     APIConnectionError,
@@ -59,4 +60,3 @@ def handle_openai_errors(operation_name: str) -> Generator[None, None, None]:
     except Exception as e:
         logger.error(f"[{operation_name}] Failed: {type(e).__name__}: {e!r}")
         raise
-

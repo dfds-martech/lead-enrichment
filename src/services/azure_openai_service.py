@@ -13,7 +13,16 @@ Example:
   async_client = AzureOpenAIService.get_async_client(model="gpt-4.1-mini")
 """
 
-from openai import AsyncAzureOpenAI, AzureOpenAI, OpenAI
+from openai import (
+    APIConnectionError,
+    APIError,
+    AsyncAzureOpenAI,
+    AuthenticationError,
+    AzureOpenAI,
+    OpenAI,
+    PermissionDeniedError,
+    RateLimitError,
+)
 
 from common.config import config
 from common.logging import get_logger
@@ -110,3 +119,23 @@ class AzureOpenAIService:
         """Clear both sync and async client caches."""
         cls._clients.clear()
         cls._async_clients.clear()
+
+
+def format_openai_error(e: Exception) -> str:
+    """Extract a clean error message from OpenAI SDK exceptions."""
+    error_type = type(e).__name__
+
+    # Handle OpenAI-specific errors with better messages
+    if isinstance(e, PermissionDeniedError):
+        return f"Azure OpenAI access denied: {e.message}"
+    elif isinstance(e, AuthenticationError):
+        return f"Azure OpenAI authentication failed: {e.message}"
+    elif isinstance(e, RateLimitError):
+        return f"Azure OpenAI rate limit exceeded: {e.message}"
+    elif isinstance(e, APIConnectionError):
+        return f"Cannot connect to Azure OpenAI: {e.message}"
+    elif isinstance(e, APIError):
+        return f"Azure OpenAI API error ({e.status_code}): {e.message}"
+
+    # For other exceptions, return type and message
+    return f"{error_type}: {e}"
