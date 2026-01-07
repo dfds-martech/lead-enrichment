@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from common.logging import get_logger
-from enrichments.company_enrichment import enrich_company
+from enrichments.company.enricher import CompanyEnricher
 from models.company import CompanyResearchCriteria
 from models.enrichment import CompanyEnrichmentResult
 
@@ -39,11 +39,13 @@ async def enrich_company_endpoint(criteria: CompanyResearchCriteria):
         }
         ```
     """
+
     company_name = criteria.name
     logger.info(f"Starting enrichment for: {company_name}")
 
     try:
-        result = await enrich_company(criteria)
+        enricher = CompanyEnricher()
+        result = await enricher.enrich(criteria)
 
         if result.error:
             logger.warning(f"Enrichment completed with errors: {result.error}")
