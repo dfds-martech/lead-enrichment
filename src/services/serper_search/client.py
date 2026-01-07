@@ -23,9 +23,9 @@ class WebSearchService:
         result = await ws.search("company name", max_results=4)
     """
 
-    def __init__(self, base_url: str = config.serper_base_url):
+    def __init__(self, base_url: str = config.SERPER_BASE_URL):
         self.base_url = base_url
-        self.api_key = config.serper_api_key.get_secret_value()
+        self.api_key = config.SERPER_API_KEY.get_secret_value()
 
     def _build_search_hit(self, item: dict[str, Any]) -> SearchHit | None:
         link = item.get("link")

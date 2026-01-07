@@ -63,8 +63,8 @@ DEFAULT_MATCH_FIELDS = [
 
 class OrbisClient:
     def __init__(self) -> None:
-        self.base_url = config.orbis_base_url
-        self.api_key = config.orbis_api_key.get_secret_value()
+        self.base_url = config.ORBIS_BASE_URL
+        self.api_key = config.ORBIS_API_KEY.get_secret_value()
         self.session = requests.Session()
         self.session.headers.update({"ApiToken": self.api_key, "Accept": "application/json"})
         self._metadata: dict | None = None

@@ -10,8 +10,8 @@ logger = get_logger(__name__)
 
 crm = CRMService()
 
-CONN_STR = config.service_bus_connection_string
-TOPIC_NAME = config.service_bus_topic_name
+CONN_STR = config.SERVICE_BUS_CONNECTION_STRING
+TOPIC_NAME = config.SERVICE_BUS_TOPIC_NAME
 
 
 def send_mock_lead_created(event_index: int):

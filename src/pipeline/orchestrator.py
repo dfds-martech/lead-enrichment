@@ -8,7 +8,7 @@ import asyncio
 from enum import Enum
 
 from common.logging import get_logger
-from enrichments.company.enrich import enrich_company
+from enrichments.company.enricher import CompanyEnricher
 from models.lead import Lead
 from services.service_bus.client import ServiceBusClient
 
@@ -26,11 +26,12 @@ class PipelineOrchestrator:
 
     def __init__(self):
         self.service_bus = ServiceBusClient()
+        self.company_enricher = CompanyEnricher()
 
     async def run_company_enrichment(self, lead: Lead):
         logger.info(f"Starting company enrichment for lead: {lead.id}")
 
-        enrichment_result = await enrich_company(lead)
+        enrichment_result = await self.company_enricher.enrich(lead)
         result = enrichment_result.model_dump() if enrichment_result else None
 
         self.service_bus.publish(

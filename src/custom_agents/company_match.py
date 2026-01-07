@@ -25,52 +25,12 @@ Example usage:
     )
 """
 
-from typing import Literal
-
 from agents import Agent, OpenAIChatCompletionsModel
-from pydantic import BaseModel, Field
 
 from common.config import config
+from models.company import CompanyMatchResult
 from services.azure_openai_service import AzureOpenAIService
-from services.orbis.schemas import OrbisCompanyMatch
 from services.orbis.tools import orbis_match_company
-
-ConfidenceLevel = Literal["very_low", "low", "medium", "high", "very_high"]
-
-
-class CompanyMatchResult(BaseModel):
-    """Result of matching a company in Orbis database."""
-
-    company: OrbisCompanyMatch | None = Field(None, description="The selected Orbis company match, if found")
-    reasoning: str = Field(description="Explanation of match selection or why no match was found")
-    total_candidates: int = Field(0, description="Total number of candidates considered")
-    confidence: ConfidenceLevel = Field(default="very_low", description="Confidence level of the match")
-
-    # Enriched fields not in Orbis
-    domain: str | None = Field(None, description="Domain from research if not available in Orbis")
-    industry: str | None = Field(None, description="Industry from research if not available in Orbis")
-    description: str | None = Field(None, description="Company description from research")
-
-    def inspect(self) -> str:
-        parts = [
-            "### CompanyMatchResult ###\n",
-            f"name: {self.company.name if self.company else 'No match'}",
-            f"bvd_id: {self.company.bvd_id if self.company else 'No match'}",
-            f"Industry: {self.industry or '-'}",
-            f"Domain: {self.domain or '-'}",
-            "",
-            f"score: {self.company.score if self.company else 'No match'}",
-            f"Confidence: {self.confidence}",
-            f"Total candidates considered: {self.total_candidates}",
-            "",
-            "\n[Reasoning]",
-            self.reasoning,
-            "",
-            "\n[Research]",
-            f"{self.description or '-'}",
-        ]
-        return "\n".join(line for line in parts if line)
-
 
 COMPANY_MATCH_INSTRUCTIONS = """
 You are a helpful company matching assistant.
@@ -118,7 +78,14 @@ If no good Orbis matches appear on the first search, simply the Orbis search by 
    - Document which input source (original vs enriched) led to the successful match
 
 **Return CompanyMatchResult:**
-- `company`: The selected OrbisMatch object (or null if no confident match found)
+- `company`: The selected OrbisMatchCompanyDetails object (or null if no confident match found)
+  - **CRITICAL**: When selecting a match, you MUST include ALL fields from the Orbis result, especially `bvd_id`
+  - The `bvd_id` field is REQUIRED for any selected match - if a match result doesn't have a `bvd_id`, do NOT select it
+  - Copy ALL fields from the Orbis match result: `bvd_id`, `name`, `matched_name`, `address`, `postcode`, `city`, `country`, `phone_or_fax`, `email_or_website`, `national_id`, `legal_form`, `status`, `score`, etc.
+- `domain`: Copy from `enriched.domain` if available (the actual business domain found by research)
+- `is_business_domain`: Copy from `enriched.is_business_domain` (tells us whether input had a free email domain or business domain)
+- `industry`: Copy from `enriched.industry` if available
+- `description`: Copy from `enriched.description` if available
 - `reasoning`: Document your search strategy, which sources you used, conflicts found, and how you resolved them
 - `total_candidates`: Total number of Orbis matches considered across all searches
 - `confidence`:
@@ -129,11 +96,13 @@ If no good Orbis matches appear on the first search, simply the Orbis search by 
   * "very_low" - no match selected
 
 **Important rules:**
+- **REQUIRED**: Any selected match MUST have a `bvd_id` field populated. If the Orbis result shows a match but `bvd_id` is missing or null, do NOT select it - either search again or return no match
 - Prioritize precision over recall - better NO match than WRONG match
 - A single match with score > 0.95 + domain match = very high confidence
 - If original and enriched data conflict (different domains/locations), try both and document the conflict
 - Use score_limit=0.7 for initial searches, lower to 0.6 if needed for broader results
 - Document your decision process clearly in reasoning
+- When constructing the `OrbisMatchCompanyDetails` object, extract ALL fields from the Orbis tool output, especially `bvd_id`
 
 **Example input:**
 ```json

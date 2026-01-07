@@ -16,8 +16,8 @@ class ServiceBusClient:
     """Service Bus listener for processing lead events."""
 
     def __init__(self):
-        self.conn_str = config.service_bus_connection_string
-        self.topic_name = config.service_bus_topic_name
+        self.conn_str = config.SERVICE_BUS_CONNECTION_STRING
+        self.topic_name = config.SERVICE_BUS_TOPIC_NAME
         self.subscription_name = "lead-enrich"
         self.client = AzureServiceBusClient.from_connection_string(self.conn_str)
         self.orchestrator = PipelineOrchestrator()

@@ -6,32 +6,34 @@ class Config(BaseSettings):
     # Leads
     # TODO: Add leads settings
 
+    # Google Search (web search)
+    GOOGLE_SEARCH_URL: str = "https://www.googleapis.com/customsearch/v1"
     GOOGLE_SEARCH_ENGINE_ID: str = ""
     GOOGLE_SEARCH_API_KEY: SecretStr = SecretStr("")
 
     # Orbis (company information)
-    orbis_base_url: str = ""
-    orbis_api_key: SecretStr = SecretStr("")
+    ORBIS_BASE_URL: str = ""
+    ORBIS_API_KEY: SecretStr = SecretStr("")
 
     # Serper (web search)
-    serper_base_url: str = "https://google.serper.dev/search"
-    serper_api_key: SecretStr = SecretStr("")
+    SERPER_BASE_URL: str = "https://google.serper.dev/search"
+    SERPER_API_KEY: SecretStr = SecretStr("")
 
     # Segment (user profiles)
-    segment_api_key: SecretStr = SecretStr("")
-    segment_space_id: SecretStr = SecretStr("")
+    SEGMENT_API_KEY: SecretStr = SecretStr("")
+    SEGMENT_SPACE_ID: SecretStr = SecretStr("")
 
     # Service Bus
-    service_bus_connection_string: SecretStr = SecretStr("")
-    service_bus_topic_name: str = "lead-events"
+    SERVICE_BUS_CONNECTION_STRING: SecretStr = SecretStr("")
+    SERVICE_BUS_TOPIC_NAME: str = "lead-events"
 
     # OpenAI
-    azure_git_token: str = ""
-    azure_openai_api_key: SecretStr = SecretStr("")
-    azure_openai_endpoint: str = ""
-    openai_model: str = "gpt-4.1-mini"
+    AZURE_GIT_TOKEN: str = ""
+    AZURE_OPENAI_API_KEY: SecretStr = SecretStr("")
+    AZURE_OPENAI_ENDPOINT: str = ""
 
     # LLM settings
+    openai_model: str = "gpt-4.1-mini"
     temperature: float = 0.0
     max_retries: int = 3
     retry_delay: int = 2

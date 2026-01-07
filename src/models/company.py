@@ -1,6 +1,11 @@
 import json
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from services.orbis.schemas import OrbisCompanyMatch
+
+ConfidenceLevel = Literal["very_low", "low", "medium", "high", "very_high"]
 
 
 class CompanyResearchCriteria(BaseModel):
@@ -99,3 +104,37 @@ class CompanyResearchResult(BaseModel):
 
     def __str__(self) -> str:
         return f"CompanyResearchResult(name='{self.name}', domain='{self.domain}', city='{self.city}', country='{self.country}')"
+
+
+class CompanyMatchResult(BaseModel):
+    """Result of matching a company in Orbis database."""
+
+    company: OrbisCompanyMatch | None = Field(None, description="The selected Orbis company match, if found")
+    reasoning: str = Field(description="Explanation of match selection or why no match was found")
+    total_candidates: int = Field(0, description="Total number of candidates considered")
+    confidence: ConfidenceLevel = Field(default="very_low", description="Confidence level of the match")
+
+    # Enriched fields not in Orbis
+    domain: str | None = Field(None, description="Domain from research if not available in Orbis")
+    industry: str | None = Field(None, description="Industry from research if not available in Orbis")
+    description: str | None = Field(None, description="Company description from research")
+
+    def inspect(self) -> str:
+        parts = [
+            "### CompanyMatchResult ###\n",
+            f"name: {self.company.name if self.company else 'No match'}",
+            f"bvd_id: {self.company.bvd_id if self.company else 'No match'}",
+            f"Industry: {self.industry or '-'}",
+            f"Domain: {self.domain or '-'}",
+            "",
+            f"score: {self.company.score if self.company else 'No match'}",
+            f"Confidence: {self.confidence}",
+            f"Total candidates considered: {self.total_candidates}",
+            "",
+            "\n[Reasoning]",
+            self.reasoning,
+            "",
+            "\n[Research]",
+            f"{self.description or '-'}",
+        ]
+        return "\n".join(line for line in parts if line)
