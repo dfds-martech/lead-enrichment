@@ -5,6 +5,7 @@ and publishes events after each step completion.
 """
 
 import asyncio
+from enum import Enum
 
 from common.logging import get_logger
 from enrichments.company.enrich import enrich_company
@@ -14,6 +15,12 @@ from services.service_bus.client import ServiceBusClient
 logger = get_logger(__name__)
 
 
+class EventType(str, Enum):
+    COMPANY_ENRICHMENT = "lead.enriched.company"
+    CARGO_ENRICHMENT = "lead.enriched.cargo"
+    PIPELINE_COMPLETED = "lead.enrichment.completed"
+
+
 class PipelineOrchestrator:
     """Orchestrates enrichment pipeline steps with event publishing."""
 
@@ -21,41 +28,33 @@ class PipelineOrchestrator:
         self.service_bus = ServiceBusClient()
 
     async def run_company_enrichment(self, lead: Lead):
-        """Run company enrichment and publish event."""
         logger.info(f"Starting company enrichment for lead: {lead.id}")
 
-        result = await enrich_company(lead)
-        data = result.model_dump() if result else None
+        enrichment_result = await enrich_company(lead)
+        result = enrichment_result.model_dump() if enrichment_result else None
 
-        # Publish completion event
         self.service_bus.publish(
-            event_type="lead.enriched.company",
-            event_data={"leadId": lead.id, "result": data},
+            event_type=EventType.COMPANY_ENRICHMENT,
+            event_data={"leadId": lead.id, "result": result},
         )
 
-        return data
+        return result
 
     async def run_cargo_enrichment(self, lead: Lead):
-        """Run cargo enrichment and publish event."""
         logger.info(f"Starting cargo enrichment for lead: {lead.id}")
 
-        # TODO: Implement cargo_enrichment
-        # result = await enrich_cargo(lead)
-        data = {"status": "not_implemented"}
+        # enrichment_result = await enrich_cargo(lead)
+        result = {"status": "not_implemented"}
 
-        # Publish completion event
         self.service_bus.publish(
-            event_type="lead.enriched.cargo",
-            event_data={"leadId": lead.id, "result": data},
+            event_type=EventType.CARGO_ENRICHMENT,
+            event_data={"leadId": lead.id, "result": result},
         )
 
-        return data
+        return result
 
     async def run_full_pipeline(self, lead: Lead):
-        """
-        Run all enrichment steps .
-        Each step publishes its own completion event.
-        """
+        """Run enrichments steps sequentially."""
 
         result = {
             "company": None,
@@ -63,26 +62,19 @@ class PipelineOrchestrator:
             # "other": None,
         }
 
-        company_result = await self.run_company_enrichment(lead)
-        result["company"] = company_result.model_dump() if company_result else None
+        result["company"] = await self.run_company_enrichment(lead)
+        result["cargo"] = await self.run_cargo_enrichment(lead)
 
-        cargo_result = await self.run_cargo_enrichment(lead)
-        result["cargo"] = cargo_result.model_dump() if cargo_result else None
-
-        # Publish pipeline completed event
         self.event_publisher.publish(
-            event_type="lead.enrichment.completed",
-            event_data={
-                "steps": result,
-            },
+            event_type=EventType.PIPELINE_COMPLETED,
+            event_data={"leadId": lead.id, "result": result},
         )
 
         return result
 
     async def run_full_pipeline_parallel(self, lead: Lead):
-        """
-        Run all enrichment steps in parallel.
-        """
+        """Run enrichments in parallel."""
+
         result = {
             "company": None,
             "cargo": None,
@@ -94,7 +86,7 @@ class PipelineOrchestrator:
             self.run_cargo_enrichment(lead),
         )
 
-        result["company"] = company_result.model_dump() if company_result else None
-        result["cargo"] = cargo_result.model_dump() if cargo_result else None
+        result["company"] = company_result
+        result["cargo"] = cargo_result
 
         return result

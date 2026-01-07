@@ -4,16 +4,18 @@ from pydantic import BaseModel, Field
 
 from custom_agents.company_match import CompanyMatchResult
 from custom_agents.company_research import CompanyResearchResult
+from models.features import CompanyFeatures
 from models.lead import Lead
 from services.orbis.schemas import OrbisCompanyDetails
 
 
 class CompanyEnrichmentResult(BaseModel):
-    """Results from company enrichment pipeline (research → match → details)."""
+    """Results from company enrichment pipeline (research → match → details → features)."""
 
     research: CompanyResearchResult | None = Field(None, description="Results from web research agent")
     match: CompanyMatchResult | None = Field(None, description="Results from Orbis matching agent")
     details: OrbisCompanyDetails | None = Field(None, description="Detailed company data from Orbis (if matched)")
+    features: CompanyFeatures | None = Field(None, description="Extracted and categorized features from company data")
     error: str | None = Field(None, description="Error message if enrichment failed")
 
 
