@@ -26,8 +26,7 @@ async def google_search(
     """
     Search the web using Google Custom Search API.
 
-    Use this tool to find specific information about companies, products, news, or any topic
-    by searching the web. Returns the most relevant web pages with titles, URLs, and snippets.
+    Use this tool to find specific information about companies, products, news, or any topic by searching the web. Returns the most relevant web pages with titles, URLs, and snippets.
 
     Args:
         query: Search query (e.g., "DFDS shipping company", "annual report 2024")
