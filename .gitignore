@@ -1,6 +1,7 @@
 # Work files
 data/
-notebooks/
+notebooks/*.*
+!notebooks/*_shared.ipynb
 
 # Env files
 .env

@@ -59,7 +59,7 @@ class AzureOpenAIService:
 
     @classmethod
     def _create_client(cls, model: str) -> AzureOpenAI:
-        api_key = config.azure_openai_api_key.get_secret_value()
+        api_key = config.AZURE_OPENAI_API_KEY.get_secret_value()
         if not api_key:
             raise ValueError("AZURE_OPENAI_API_KEY environment variable is required")
 
@@ -75,7 +75,7 @@ class AzureOpenAIService:
 
     @classmethod
     def _create_async_client(cls, model: str) -> AsyncAzureOpenAI:
-        api_key = config.azure_openai_api_key.get_secret_value()
+        api_key = config.AZURE_OPENAI_API_KEY.get_secret_value()
         if not api_key:
             logger.error("[AzureOpenAI] AZURE_OPENAI_API_KEY is missing or empty")
             raise ValueError("AZURE_OPENAI_API_KEY environment variable is required")
@@ -85,7 +85,7 @@ class AzureOpenAIService:
             logger.error(f"[AzureOpenAI] Unknown model '{model}'. Available: {available}")
             raise ValueError(f"Unknown model '{model}'. Available models: {available}")
 
-        endpoint = config.azure_openai_endpoint
+        endpoint = config.AZURE_OPENAI_ENDPOINT
         api_version = cls.MODELS_API_VERSIONS[model]
         logger.info(
             f"[AzureOpenAI] Creating async client - model: {model}, endpoint: {endpoint}, api_version: {api_version}"
