@@ -34,6 +34,8 @@ class CompanyEnricher:
         self._match_agent: Agent[CompanyMatchResult] | None = None
         self._orbis_client: OrbisClient | None = None
 
+    # Lazy-load agents and orbis client
+
     @property
     def research_agent(self) -> Agent[CompanyResearchResult]:
         if self._research_agent is None:
@@ -51,6 +53,8 @@ class CompanyEnricher:
         if self._orbis_client is None:
             self._orbis_client = OrbisClient()
         return self._orbis_client
+
+    # Research stage / web search and scraping helpers
 
     async def _research(self, criteria: CompanyResearchCriteria) -> CompanyResearchResult:
         logger.info(f"[Research] Starting for: {criteria.name}")
@@ -110,6 +114,8 @@ class CompanyEnricher:
 
         logger.info(f"[Details] fetched: {company_details.name} (BvD ID: {company_details.bvd_id})")
         return company_details
+
+    # CompanyEnrichment pipeline orchestrator
 
     async def enrich(self, lead: Lead) -> CompanyEnrichmentResult:
         """Run company enrichment through all stages."""
