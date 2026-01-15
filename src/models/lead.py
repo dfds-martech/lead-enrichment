@@ -1,7 +1,7 @@
 import ast
 import json
 from enum import Enum
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,31 +24,119 @@ FORM_TYPE_MAPPING: dict = {
     "Contract Logistics Quote Form": LeadType.CONTRACT_LOGISTICS,
 }
 
-# mapping for differnet lead forms
-FORM_PAYLOAD_MAPPINGS: dict = {
-    "Logistics Quote Form": {
-        "cargo_type": "TypeOfCargoRoad",
-        "request_type": "TypeOfRequest",
-        "partnership_needs": "PartnershipNeeds",
-    },
-    "Customs Clearance Quote Form": {
-        "cargo_type": "TypeOfCargo",
-        "request_type": "TypeOfRequest",
-        "clearance_service": "CustomsClearanceService",
-        "partnership_needs": "PartnershipNeeds",
-    },
-    "Freight Quote Form": {
-        "route": "Route",
-        "unit_type": "UnitType",
-        "packaging_required": "iNeedPackagingServices",
-        "partnership_needs": "PartnershipNeeds",
-    },
-    "Contract Logistics Quote Form": {
-        "service_type": "ContractLogisticsService",
-        "request_type": "TypeOfRequest",
-        "partnership_needs": "PartnershipNeeds",
-    },
-}
+
+class LeadQuote(BaseModel):
+    """Quote form data normalized across form types."""
+
+    # Field mappings
+    _FIELD_MAPPINGS: ClassVar[dict[str, dict[str, str]]] = {
+        "Logistics Quote Form": {
+            "DescribeYourCargo": "description",
+            "TypeOfCargoRoad": "cargo_type",
+            "TypeOfRoadRequest": "load_type",
+            "TypeOfRequest": "request_type",
+            "PartnershipNeeds": "partnership_needs",
+        },
+        "Customs Clearance Quote Form": {
+            "DescribeYourCargo": "description",
+            "TypeOfCargo": "cargo_type",
+            "TypeOfRequest": "request_type",
+            "CustomsClearanceService": "clearance_service",
+            "PartnershipNeeds": "partnership_needs",
+        },
+        "Freight Quote Form": {
+            "DescribeYourCargo": "description",
+            "Route": "route",
+            "UnitType": "unit_type",
+            "iNeedPackagingServices": "packaging_required",
+            "PartnershipNeeds": "partnership_needs",
+        },
+        "Contract Logistics Quote Form": {
+            "DescribeYourCargo": "description",
+            "ContractLogisticsService": "service_type",
+            "TypeOfRequest": "request_type",
+            "PartnershipNeeds": "partnership_needs",
+        },
+    }
+
+    # Common fields
+    form_title: str | None = Field(None, description="Form type identifier")
+    form_locale: str | None = Field(None, description="Form locale (en, de, etc.)")
+    description: str | None = Field(None, description="DescribeYourCargo - user's cargo description")
+    partnership_needs: str | None = Field(None, description="OneOff, Recurring, etc.")
+
+    # Logistics & Customs fields
+    cargo_type: str | None = Field(None, description="TypeOfCargoRoad/TypeOfCargo")
+    load_type: str | None = Field(None, description="FullLoad, PartLoad (Logistics only)")
+    request_type: str | None = Field(None, description="Business, Private (Logistics/Customs/Contract)")
+
+    # Customs specific
+    clearance_service: str | None = Field(None, description="Customs clearance service type")
+
+    # Freight specific
+    route: str | None = Field(None, description="Route type (Freight only)")
+    unit_type: str | None = Field(None, description="Container type (Freight only)")
+    packaging_required: str | None = Field(None, description="Packaging services needed (Freight only)")
+
+    # Contract specific
+    service_type: str | None = Field(None, description="Contract logistics service type")
+
+    # CRM fields (from_crm only)
+    number: int | None = Field(None, description="Request number from CRM")
+    notes: str | None = Field(None, description="Quote notes from CRM")
+
+    @classmethod
+    def from_payload(cls, payload: dict, **extras) -> "LeadQuote":
+        """Create LeadQuote from raw form payload.
+
+        Args:
+            payload: The raw form payload dict
+            **extras: Additional fields to set (e.g., number, notes from CRM)
+        """
+        form_title = payload.get("formTitle")
+        mappings = cls._FIELD_MAPPINGS.get(form_title, {})
+
+        data = {
+            "form_title": form_title,
+            "form_locale": payload.get("formLocale"),
+        }
+
+        # Map payload fields to model fields
+        for payload_key, model_key in mappings.items():
+            if payload_key in payload:
+                data[model_key] = payload[payload_key]
+
+        # Add any extra fields (e.g., CRM-specific)
+        data.update(extras)
+
+        return cls(**data)
+
+    def to_prompt(self) -> str:
+        """Convert quote fields to prompt format for LLM extraction."""
+        sections = []
+
+        form_fields = []
+
+        if self.request_type:
+            form_fields.append(f"- Request Type: {self.request_type}")
+        if self.partnership_needs:
+            form_fields.append(f"- Partnership Needs: {self.partnership_needs}")
+        if self.cargo_type:
+            form_fields.append(f"- Cargo Type: {self.cargo_type}")
+        if self.load_type:
+            form_fields.append(f"- Load Type: {self.load_type}")
+        if self.unit_type:
+            form_fields.append(f"- Unit Type: {self.unit_type}")
+        if self.route:
+            form_fields.append(f"- Route: {self.route}")
+
+        if form_fields:
+            sections.append("<Form Fields>\n" + "\n".join(form_fields) + "\n</Form Fields>")
+
+        if self.description:
+            sections.append(f"<Cargo Description>\n{self.description}\n</Cargo Description>")
+
+        return "\n\n".join(sections)
 
 
 class LeadCountry(BaseModel):
@@ -96,7 +184,7 @@ class Lead(BaseModel):
     company: dict
     collection: dict
     delivery: dict
-    quote: dict
+    quote: LeadQuote
 
     # Raw data
     record: dict
@@ -121,17 +209,10 @@ class Lead(BaseModel):
         collection = _extract_loading_point("collection", event)
         delivery = _extract_loading_point("delivery", event)
 
-        # Quote details - need to extract form_title from payload or sourceName
+        # Quote details
         form_title = payload.get("formTitle")
         lead_type = FORM_TYPE_MAPPING.get(form_title) if form_title else None
-
-        quote = {
-            "form_title": form_title,
-            "form_locale": payload.get("formLocale"),
-        }
-        # Add form-specific fields from payload
-        for key, value in FORM_PAYLOAD_MAPPINGS.get(form_title, {}).items():
-            quote[key] = payload.get(value, None)
+        quote = LeadQuote.from_payload(payload)
 
         return cls(
             id=event.get("lead", {}).get("crmLeadId", "UNKNOWN_LEAD_ID"),
@@ -206,17 +287,11 @@ class Lead(BaseModel):
         # Quote details
         form_title = payload.get("formTitle")
         lead_type = FORM_TYPE_MAPPING.get(form_title)
-
-        quote = {
-            "form_title": form_title,
-            "form_locale": payload.get("formLocale"),
-            "number": record.get("dfds_requestnumber"),
-            "type": record.get("dfds_requesttype"),
-            "description": payload.get("DescribeYourCargo"),
-            "notes": record.get("dfds_quotenotes"),
-        }
-        for key, value in FORM_PAYLOAD_MAPPINGS.get(form_title, {}).items():
-            quote[key] = payload.get(value, None)
+        quote = LeadQuote.from_payload(
+            payload,
+            number=record.get("dfds_requestnumber"),
+            notes=record.get("dfds_quotenotes"),
+        )
 
         return cls(
             type=lead_type,
