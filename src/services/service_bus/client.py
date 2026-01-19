@@ -20,7 +20,7 @@ class ServiceBusClient:
         self.topic_name = config.SERVICE_BUS_TOPIC_NAME
         self.subscription_name = "lead-enrich"
         self.client = AzureServiceBusClient.from_connection_string(self.conn_str)
-        self.orchestrator = PipelineOrchestrator()
+        self.orchestrator = PipelineOrchestrator(service_bus=self)
 
     async def _handle_message(self, message):
         """Process a single message from the queue."""
@@ -35,7 +35,7 @@ class ServiceBusClient:
             # Run enrichment
             match event_type:
                 case "lead.created" | "lead.updated":
-                    await self.orchestrator.run_full_pipeline(lead)
+                    await self.orchestrator.run_pipeline(lead)
 
                 case "lead.enrich.company":
                     await self.orchestrator.run_company_enrichment(lead)

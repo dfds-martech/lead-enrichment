@@ -28,10 +28,18 @@ class LeadFeatures(BaseModel):
     is_europe_company_location: bool | None = Field(None, description="Company is located in Europe")
 
 
+class LeadEnrichmentResult(BaseModel):
+    """Results from lead enrichment pipeline."""
+
+    features: LeadFeatures | None = Field(None, description="Computed features from lead data")
+    error: str | None = Field(None, description="Error message if enrichment failed")
+
+
 class EnrichedLead(BaseModel):
     """Complete enrichment results for a lead from all pipelines."""
 
     lead: Lead = Field(description="Original lead data")
+    lead_features: LeadEnrichmentResult | None = Field(None, description="Lead feature enrichment results")
     company: CompanyEnrichmentResult = Field(description="Company enrichment results")
     cargo: CargoEnrichmentResult | None = Field(None, description="Cargo enrichment results")
     # TODO: user: UserEnrichmentResult = Field(description="User enrichment results")
