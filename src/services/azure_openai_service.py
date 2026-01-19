@@ -70,7 +70,7 @@ class AzureOpenAIService:
         return AzureOpenAI(
             api_key=api_key,
             api_version=cls.MODELS_API_VERSIONS[model],
-            azure_endpoint=config.azure_openai_endpoint,
+            azure_endpoint=config.AZURE_OPENAI_ENDPOINT,
         )
 
     @classmethod

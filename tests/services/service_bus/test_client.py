@@ -104,7 +104,7 @@ async def test_handle_message_with_crm_mock_event(service_bus_client, mock_lead_
     lead = call_args[0][0]  # First positional argument
 
     # Verify lead has correct identifiers
-    assert lead.identifiers.get("crm_lead_id") == mock_lead_event["lead"]["crmLeadId"]
+    assert lead.id == mock_lead_event["lead"]["crmLeadId"]
     assert lead.company.get("name") == mock_lead_event["company"]["name"]
 
     # Verify message was completed

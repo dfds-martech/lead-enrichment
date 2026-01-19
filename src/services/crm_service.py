@@ -10,7 +10,8 @@ import pandas as pd
 
 from models.lead import Lead
 
-root_dir = Path.cwd().parent
+# root_dir = Path.cwd().parent
+root_dir = Path(__file__).resolve().parents[2]
 
 
 class CRMService:

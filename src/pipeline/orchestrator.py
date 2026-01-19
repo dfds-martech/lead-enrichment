@@ -10,7 +10,6 @@ from enum import Enum
 from common.logging import get_logger
 from enrichments.company.enricher import CompanyEnricher
 from models.lead import Lead
-from services.service_bus.client import ServiceBusClient
 
 logger = get_logger(__name__)
 
@@ -25,6 +24,8 @@ class PipelineOrchestrator:
     """Orchestrates enrichment pipeline steps with event publishing."""
 
     def __init__(self):
+        from services.service_bus.client import ServiceBusClient
+
         self.service_bus = ServiceBusClient()
         self.company_enricher = CompanyEnricher()
 
