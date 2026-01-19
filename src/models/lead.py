@@ -265,7 +265,7 @@ class Lead(BaseModel):
             "city": company_city,
             "postal_code": record.get("address1_postalcode", None),
             "country": company_country.name,
-            "country_alpha2": company_country.alpha2,
+            "country_code": company_country.alpha2,
             "phone_number": phone_number,
         }
 
@@ -276,12 +276,12 @@ class Lead(BaseModel):
         collection = {
             "city": record.get("dfds_collectioncity", None),
             "country": collection_country.name,
-            "country_alpha2": collection_country.alpha2,
+            "country_code": collection_country.alpha2,
         }
         delivery = {
             "city": record.get("dfds_deliverycity", None),
             "country": delivery_country.name,
-            "country_alpha2": delivery_country.alpha2,
+            "country_code": delivery_country.alpha2,
         }
 
         # Quote details
