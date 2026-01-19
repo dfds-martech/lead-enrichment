@@ -14,14 +14,15 @@ from agents import Agent, Runner
 
 from common.logging import get_logger
 from common.openai_errors import handle_openai_errors
-from custom_agents.company_match import CompanyMatchResult, create_company_match_agent
-from custom_agents.company_research import CompanyResearchResult, create_company_research_agent
 from enrichments.company.features import extract_company_features
+from enrichments.company.schemas import CompanyEnrichmentResult
 from models.company import CompanyResearchCriteria
-from models.enrichment import CompanyEnrichmentResult
 from models.lead import Lead
 from services.orbis.client import OrbisClient
 from services.orbis.schemas import OrbisCompanyDetails
+
+from .agents.company_match import CompanyMatchResult, create_company_match_agent
+from .agents.company_research import CompanyResearchResult, create_company_research_agent
 
 logger = get_logger(__name__)
 

@@ -4,8 +4,8 @@ from fastapi import APIRouter, HTTPException
 
 from common.logging import get_logger
 from enrichments.company.enricher import CompanyEnricher
+from enrichments.company.schemas import CompanyEnrichmentResult
 from models.company import CompanyResearchCriteria
-from models.enrichment import CompanyEnrichmentResult
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["enrichment"])

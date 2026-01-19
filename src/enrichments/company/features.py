@@ -3,8 +3,6 @@
 Extracts categorized features from the entire CompanyEnrichmentResult for analysis and decision-making.
 """
 
-from custom_agents.company_match import CompanyMatchResult
-from custom_agents.company_research import CompanyResearchResult
 from enrichments.base_features import (
     get_cash_flow_bracket,
     get_email_domain_type,
@@ -16,7 +14,9 @@ from enrichments.base_features import (
     get_shareholders_funds_bracket,
     get_total_assets_bracket,
 )
-from models.features import CompanyFeatures
+from enrichments.company.agents.company_match import CompanyMatchResult
+from enrichments.company.agents.company_research import CompanyResearchResult
+from enrichments.company.schemas import CompanyFeatures
 from services.orbis.schemas import OrbisCompanyDetails
 
 # NACE code to industry category mapping (simplified - can be expanded)

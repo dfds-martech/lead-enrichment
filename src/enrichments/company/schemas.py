@@ -1,10 +1,9 @@
-"""Feature models for enrichment results.
-
-Extracted features from raw enrichment data, providing categorized
-and normalized values for analysis and decision-making.
-"""
-
 from pydantic import BaseModel, Field
+
+from services.orbis.schemas import OrbisCompanyDetails
+
+from .agents.company_match import CompanyMatchResult
+from .agents.company_research import CompanyResearchResult
 
 
 class CompanyFeatures(BaseModel):
@@ -56,3 +55,13 @@ class CompanyFeatures(BaseModel):
     )
     has_financial_data: bool = Field(description="Whether financial data is available")
     industry_category: str = Field(description="Industry category derived from NACE code, or 'unknown'")
+
+
+class CompanyEnrichmentResult(BaseModel):
+    """Results from company enrichment pipeline (research → match → details → features)."""
+
+    research: CompanyResearchResult | None = Field(None, description="Results from web research agent")
+    match: CompanyMatchResult | None = Field(None, description="Results from Orbis matching agent")
+    details: OrbisCompanyDetails | None = Field(None, description="Detailed company data from Orbis (if matched)")
+    features: CompanyFeatures | None = Field(None, description="Extracted and categorized features from company data")
+    error: str | None = Field(None, description="Error message if enrichment failed")
