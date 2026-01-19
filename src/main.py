@@ -13,12 +13,14 @@ from fastapi import FastAPI
 
 from routes import enrichment, health, scrape
 
+# from services.service_bus.client import ServiceBusClient
+
 load_dotenv()
 
 # Disable OpenAI agents SDK tracing (as we are using azure openai)
 set_tracing_disabled(disabled=True)
 
-# Initialize
+# Initialize app
 app = FastAPI(
     title="Lead Enrichment API",
     description="B2B lead enrichment service with company research and Orbis matching",
@@ -27,7 +29,7 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Include routers
+# Set routers
 app.include_router(health.router)
 app.include_router(enrichment.router)
 app.include_router(scrape.router)
@@ -47,3 +49,7 @@ if __name__ == "__main__":
         reload=False,  # Disable reload in production
         log_level="info",
     )
+
+    # Run service bus listener
+    # service_bus = ServiceBusClient()
+    # asyncio.run(service_bus.listen())
