@@ -22,6 +22,10 @@ class LeadFeatures(BaseModel):
     """Computed features from lead data."""
 
     route_type: RouteType = Field(description="Geographic classification of the route")
+    is_cross_channel_transport: bool | None = Field(
+        None, description="Transport requires channel crossing (UK/Ireland ↔ continental Europe)"
+    )
+    is_europe_company_location: bool | None = Field(None, description="Company is located in Europe")
 
 
 class EnrichedLead(BaseModel):

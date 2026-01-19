@@ -42,6 +42,25 @@ EUROPEAN_ISO_CODES = {
     "CH",  # Switzerland
     # Special cases
     "GB",  # United Kingdom
+    "UK",  # United Kingdom (Great Britain)
+}
+
+# Countries requiring channel crossing to reach continental Europe
+CROSS_CHANNEL_ISO_CODES = {
+    "GB",  # United Kingdom (Great Britain)
+    "IE",  # Ireland
+}
+
+# Country name variations for cross-channel detection
+CROSS_CHANNEL_COUNTRY_NAMES = {
+    "united kingdom",
+    "great britain",
+    "england",
+    "scotland",
+    "wales",
+    "northern ireland",
+    "ireland",
+    "uk",
 }
 
 
@@ -84,6 +103,43 @@ def is_european_country(country_name: str | None = None, country_code: str | Non
             try:
                 country = pycountry.countries.search_fuzzy(normalized)[0]
                 return country.alpha_2 in EUROPEAN_ISO_CODES
+            except LookupError:
+                pass
+
+    return None
+
+
+def is_cross_channel_country(
+    country_name: str | None = None,
+    country_code: str | None = None,
+) -> bool | None:
+    """Check if a country requires channel crossing to reach continental Europe.
+
+    Args:
+        country_name: Country name (e.g., "United Kingdom", "Ireland")
+        country_code: ISO 3166-1 alpha-2 code (e.g., "GB", "IE")
+
+    Returns:
+        True if cross-channel country, False if not, None if unable to determine
+    """
+    # Try direct code lookup first
+    if country_code:
+        code_upper = country_code.upper()
+        if code_upper in CROSS_CHANNEL_ISO_CODES:
+            return True
+        if len(code_upper) == 2:
+            return False
+
+    # Fall back to name lookup
+    if country_name:
+        normalized = normalize_country_name(country_name)
+        if normalized and normalized.lower() in CROSS_CHANNEL_COUNTRY_NAMES:
+            return True
+        # Try pycountry for formal names
+        if normalized:
+            try:
+                country = pycountry.countries.search_fuzzy(normalized)[0]
+                return country.alpha_2 in CROSS_CHANNEL_ISO_CODES
             except LookupError:
                 pass
 

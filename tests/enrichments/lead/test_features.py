@@ -1,7 +1,18 @@
 """Tests for lead geographic features."""
 
-from enrichments.lead.features import RouteType, extract_lead_features, extract_route_type
-from enrichments.lead.geography import EUROPEAN_ISO_CODES, is_european_country, normalize_country_name
+from enrichments.lead.features import (
+    RouteType,
+    extract_is_cross_channel_transport,
+    extract_is_europe_company_location,
+    extract_lead_features,
+    extract_route_type,
+)
+from enrichments.lead.geography import (
+    EUROPEAN_ISO_CODES,
+    is_cross_channel_country,
+    is_european_country,
+    normalize_country_name,
+)
 from enrichments.lead.schemas import LeadFeatures
 from models.lead import Lead, LeadQuote
 
@@ -11,13 +22,15 @@ def make_lead(
     collection_code: str | None = None,
     delivery_country: str | None = None,
     delivery_code: str | None = None,
+    company_country: str | None = None,
+    company_code: str | None = None,
 ) -> Lead:
     """Create a minimal Lead for testing."""
     return Lead(
         id="test",
         identifiers={},
         contact={},
-        company={},
+        company={"country": company_country, "country_code": company_code},
         collection={"country": collection_country, "country_code": collection_code},
         delivery={"country": delivery_country, "country_code": delivery_code},
         quote=LeadQuote(),
@@ -119,11 +132,91 @@ def test_route_type_other_partial_data():
     assert extract_route_type(lead) == RouteType.OTHER
 
 
+# --- Cross-channel country tests ---
+
+
+def test_is_cross_channel_country_with_uk():
+    assert is_cross_channel_country(country_code="GB") is True
+    assert is_cross_channel_country(country_name="United Kingdom") is True
+
+
+def test_is_cross_channel_country_with_ireland():
+    assert is_cross_channel_country(country_code="IE") is True
+    assert is_cross_channel_country(country_name="Ireland") is True
+
+
+def test_is_cross_channel_country_with_continental():
+    assert is_cross_channel_country(country_code="DE") is False
+    assert is_cross_channel_country(country_code="FR") is False
+
+
+# --- Cross-channel transport tests ---
+
+
+def test_cross_channel_transport_uk_to_germany():
+    lead = make_lead(collection_code="GB", delivery_code="DE")
+    assert extract_is_cross_channel_transport(lead) is True
+
+
+def test_cross_channel_transport_france_to_ireland():
+    lead = make_lead(collection_code="FR", delivery_code="IE")
+    assert extract_is_cross_channel_transport(lead) is True
+
+
+def test_cross_channel_transport_germany_to_france():
+    lead = make_lead(collection_code="DE", delivery_code="FR")
+    assert extract_is_cross_channel_transport(lead) is False
+
+
+def test_cross_channel_transport_uk_to_ireland():
+    # Both are channel countries - not a cross-channel transport
+    lead = make_lead(collection_code="GB", delivery_code="IE")
+    assert extract_is_cross_channel_transport(lead) is False
+
+
+def test_cross_channel_transport_missing_data():
+    lead = make_lead(collection_code="GB")
+    assert extract_is_cross_channel_transport(lead) is None
+
+
+# --- Europe company location tests ---
+
+
+def test_europe_company_location_germany():
+    lead = make_lead(company_code="DE")
+    assert extract_is_europe_company_location(lead) is True
+
+
+def test_europe_company_location_us():
+    lead = make_lead(company_code="US")
+    assert extract_is_europe_company_location(lead) is False
+
+
+def test_europe_company_location_by_name():
+    lead = make_lead(company_country="France")
+    assert extract_is_europe_company_location(lead) is True
+
+
+def test_europe_company_location_missing():
+    lead = make_lead()
+    assert extract_is_europe_company_location(lead) is None
+
+
 # --- Feature extraction tests ---
 
 
 def test_extract_lead_features_returns_model():
-    lead = make_lead(collection_code="DE", delivery_code="FR")
+    lead = make_lead(collection_code="DE", delivery_code="FR", company_code="DE")
     features = extract_lead_features(lead)
     assert isinstance(features, LeadFeatures)
     assert features.route_type == RouteType.EUROPE_CROSS_BORDER
+    assert features.is_cross_channel_transport is False
+    assert features.is_europe_company_location is True
+
+
+def test_extract_lead_features_cross_channel():
+    lead = make_lead(collection_code="GB", delivery_code="DE", company_code="GB")
+    features = extract_lead_features(lead)
+    assert features.route_type == RouteType.EUROPE_CROSS_BORDER
+    assert features.is_cross_channel_transport is True
+    assert features.is_europe_company_location is True
