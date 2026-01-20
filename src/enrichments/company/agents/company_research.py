@@ -35,6 +35,7 @@ class CompanyResearchResult(BaseModel):
     city: str | None = Field(None, description="City of the company")
     postal_code: str | None = Field(None, description="Postal code code of the company")
     country: str | None = Field(None, description="Country of the company")
+    country_code: str | None = Field(None, description="Country code (ISO2) of the company")
     national_id: str | None = Field(None, description="Official national company identifier (e.g. CVR, VAT, etc.)")
     industry: str | None = Field(None, description="Industry or sector in which the company operates")
     employee_count: int | None = Field(None, description="Number of employees (if available)")

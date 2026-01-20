@@ -1,3 +1,9 @@
+"""Company enrichment schemas.
+
+Defines the structured output models for company enrichment,
+organized by domain for clarity and maintainability.
+"""
+
 from pydantic import BaseModel, Field
 
 from services.orbis.schemas import OrbisCompanyDetails
@@ -5,56 +11,116 @@ from services.orbis.schemas import OrbisCompanyDetails
 from .agents.company_match import CompanyMatchResult
 from .agents.company_research import CompanyResearchResult
 
+# ============================================================================
+# Domain-Specific Feature Models
+# ============================================================================
+
+
+class CompanyIdentifiers(BaseModel):
+    """Unique identifiers for the company."""
+
+    orbis_id: str | None = Field(None, description="Orbis ID")
+    bvd_id: str | None = Field(None, description="Bureau van Dijk ID")
+    national_id: str | None = Field(None, description="National company identifier (e.g., company number)")
+    vat_number: str | None = Field(None, description="VAT number if available")
+
+
+class CompanyAddress(BaseModel):
+    """Company address information."""
+
+    street: str | None = Field(None, description="Street address")
+    city: str | None = Field(None, description="City")
+    postal_code: str | None = Field(None, description="Postal/ZIP code")
+    country: str | None = Field(None, description="Country name")
+    country_code: str | None = Field(None, description="ISO country code")
+    phone: str | None = Field(None, description="Phone number")
+
+
+class CompanyInfo(BaseModel):
+    """Basic company information."""
+
+    name: str | None = Field(None, description="Official company name")
+    address: CompanyAddress | None = Field(None, description="Company address")
+    website: str | None = Field(None, description="Company website URL")
+    domain: str | None = Field(None, description="Primary domain")
+    email_domain_type: str = Field("unknown", description="'company', 'free', or 'unknown'")
+    description: str | None = Field(None, description="Company description from research")
+
+
+class CompanyIndustry(BaseModel):
+    """Industry classification."""
+
+    description: str | None = Field(None, description="Industry description from research")
+    nace_code: str | None = Field(None, description="NACE code from Orbis")
+    category: str = Field("unknown", description="Industry category mapped from NACE code")
+
+
+class CompanyStatus(BaseModel):
+    """Company legal and operational status."""
+
+    legal_status: str | None = Field(None, description="Legal status code from Orbis")
+    consolidation_code: str | None = Field(None, description="Reporting type: C1|C2|U1|U2|LF")
+    is_active: bool = Field(True, description="Whether company is active")
+
+
+class CompanyMatchMetadata(BaseModel):
+    """Metadata about the Orbis matching process."""
+
+    confidence: str = Field("very_low", description="Confidence level: very_low|low|medium|high|very_high")
+    score: float | None = Field(None, description="Match score (0.0 - 1.0)")
+    candidates_considered: int = Field(0, description="Number of candidates evaluated")
+    notes: str | None = Field(None, description="Notes about the match")
+
+
+class CompanyEmployees(BaseModel):
+    """Employee information."""
+
+    count: float | None = Field(None, description="Number of employees")
+    bracket: str = Field("unknown", description="Size bracket: 1-9|10-49|50-249|250+|unknown")
+
+
+class CompanyFinancials(BaseModel):
+    """Financial metrics and health indicators."""
+
+    # Raw values (EUR)
+    revenue: float | None = Field(None, description="Operating revenue in EUR")
+    profit_before_tax: float | None = Field(None, description="Profit before tax in EUR")
+    profit_loss: float | None = Field(None, description="Net profit/loss in EUR")
+    cash_flow: float | None = Field(None, description="Cash flow in EUR")
+    total_assets: float | None = Field(None, description="Total assets in EUR")
+    shareholders_funds: float | None = Field(None, description="Shareholders funds in EUR")
+
+    # Brackets for bucketing/filtering
+    revenue_bracket: str = Field("unknown", description="Revenue bracket")
+    profit_bracket: str = Field("unknown", description="Profit bracket")
+    assets_bracket: str = Field("unknown", description="Assets bracket")
+
+    # Derived metrics
+    accounting_year: str = Field("unknown", description="Year of financial data")
+    financial_health: str = Field("unknown", description="Health: healthy|moderate|at_risk|unknown")
+    has_data: bool = Field(False, description="Whether any financial data is available")
+
+
+# ============================================================================
+# Aggregated Feature Model
+# ============================================================================
+
 
 class CompanyFeatures(BaseModel):
-    """Extracted features from company enrichment data."""
+    """Complete extracted features for a company, organized by domain."""
 
-    # Identifiers
-    orbis_id: str | None = Field(None, description="Orbis ID of the company")
-    bvd_id: str | None = Field(None, description="BvD ID of the company")
-    vat_number: str | None = Field(None, description="VAT number if available")
-    national_id: str | None = Field(None, description="National company identifier")
+    identifiers: CompanyIdentifiers = Field(default_factory=CompanyIdentifiers)
+    info: CompanyInfo = Field(default_factory=CompanyInfo)
+    status: CompanyStatus = Field(default_factory=CompanyStatus)
+    industry: CompanyIndustry = Field(default_factory=CompanyIndustry)
+    match: CompanyMatchMetadata = Field(default_factory=CompanyMatchMetadata)
+    employees: CompanyEmployees = Field(default_factory=CompanyEmployees)
+    financials: CompanyFinancials = Field(default_factory=CompanyFinancials)
 
-    # Company Info
-    name: str | None = Field(None, description="Company name")
-    website: str | None = Field(None, description="Company website URL")
-    domain: str | None = Field(None, description="Company domain")
-    email_domain_type: str = Field(description="Email domain type: 'company' or 'free' or 'unknown'")
-    industry: str | None = Field(None, description="Industry description from research")
-    main_industry: str = Field(description="Main industry category")
 
-    # Match Metadata
-    match_confidence: str = Field(description="Match confidence level")
-    match_score: float | None = Field(None, description="Match score from Orbis")
-    match_rating: str = Field(
-        description="Match rating: 'excellent', 'very_good', 'good', 'fair', 'poor', or 'unknown'"
-    )
-
-    # Employees
-    employees: float | None = Field(None, description="Number of employees")
-    employees_bracket: str
-
-    # Financials with brackets
-    revenue: float | None = Field(None, description="Operating revenue in EUR")
-    revenue_bracket: str
-    cash_flow: float | None = Field(None, description="Cash flow in EUR")
-    cash_flow_bracket: str
-    profit_before_tax: float | None = Field(None, description="Profit before tax in EUR")
-    profit_before_tax_bracket: str
-    profit_loss: float | None = Field(None, description="Profit/loss in EUR")
-    profit_loss_bracket: str
-    shareholders_funds: float | None = Field(None, description="Shareholders funds in EUR")
-    shareholders_funds_bracket: str
-    total_assets: float | None = Field(None, description="Total assets in EUR")
-    total_assets_bracket: str
-
-    # Other
-    accounting_year: str
-    financial_health: str = Field(
-        description="Financial health indicator: 'healthy', 'moderate', 'at_risk', or 'unknown'"
-    )
-    has_financial_data: bool = Field(description="Whether financial data is available")
-    industry_category: str = Field(description="Industry category derived from NACE code, or 'unknown'")
+# ============================================================================
+# Enrichment Result Model
+# ============================================================================
 
 
 class CompanyEnrichmentResult(BaseModel):
@@ -62,6 +128,6 @@ class CompanyEnrichmentResult(BaseModel):
 
     research: CompanyResearchResult | None = Field(None, description="Results from web research agent")
     match: CompanyMatchResult | None = Field(None, description="Results from Orbis matching agent")
-    details: OrbisCompanyDetails | None = Field(None, description="Detailed company data from Orbis (if matched)")
-    features: CompanyFeatures | None = Field(None, description="Extracted and categorized features from company data")
+    details: OrbisCompanyDetails | None = Field(None, description="Detailed company data from Orbis")
+    features: CompanyFeatures | None = Field(None, description="Extracted and categorized features")
     error: str | None = Field(None, description="Error message if enrichment failed")

@@ -4,7 +4,7 @@ Common helper functions for feature extraction across all enrichment types.
 Provides reusable patterns for brackets, categories, and data completeness scoring.
 """
 
-# Common free email providers
+# TODO: expand this list
 FREE_EMAIL_PROVIDERS = {
     "gmail.com",
     "yahoo.com",
@@ -21,6 +21,9 @@ FREE_EMAIL_PROVIDERS = {
     "msn.com",
     "inbox.com",
     "mail.ru",
+    "proton.me",
+    "tutanota.com",
+    "tuta.com",
 }
 
 
@@ -112,27 +115,3 @@ def get_email_domain_type(domain: str | None) -> str:
     if base_domain in FREE_EMAIL_PROVIDERS:
         return "free"
     return "company"
-
-
-def get_match_rating(score: float | None) -> str:
-    """
-    Convert match score to rating.
-
-    Args:
-        score: Match score from 0.0 to 1.0
-
-    Returns:
-        Rating: 'excellent', 'very_good', 'good', 'fair', 'poor', or 'unknown'
-    """
-    if score is None:
-        return "unknown"
-    if score >= 0.95:
-        return "excellent"
-    elif score >= 0.85:
-        return "very_good"
-    elif score >= 0.75:
-        return "good"
-    elif score >= 0.65:
-        return "fair"
-    else:
-        return "poor"

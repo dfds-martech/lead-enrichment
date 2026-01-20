@@ -1,155 +1,355 @@
 """Company feature extraction.
 
-Extracts categorized features from the entire CompanyEnrichmentResult for analysis and decision-making.
+Extracts categorized features from company enrichment data (research, match, details)
+organized by domain with explicit priority rules.
+
+Priority order for data resolution: details > match > research
 """
 
 from enrichments.base_features import (
-    get_cash_flow_bracket,
     get_email_domain_type,
     get_employees_bracket,
-    get_match_rating,
     get_profit_before_tax_bracket,
-    get_profit_loss_bracket,
     get_revenue_bracket,
-    get_shareholders_funds_bracket,
     get_total_assets_bracket,
 )
 from enrichments.company.agents.company_match import CompanyMatchResult
 from enrichments.company.agents.company_research import CompanyResearchResult
-from enrichments.company.schemas import CompanyFeatures
+from enrichments.company.schemas import (
+    CompanyAddress,
+    CompanyEmployees,
+    CompanyFeatures,
+    CompanyFinancials,
+    CompanyIdentifiers,
+    CompanyIndustry,
+    CompanyInfo,
+    CompanyMatchMetadata,
+    CompanyStatus,
+)
+from enrichments.company.utils import get_industry_category
 from services.orbis.schemas import OrbisCompanyDetails
 
-# NACE code to industry category mapping (simplified - can be expanded)
-NACE_INDUSTRY_MAPPING: dict[str, str] = {
-    # Agriculture, forestry and fishing
-    "01": "Agriculture",
-    "02": "Forestry",
-    "03": "Fishing",
-    # Mining and quarrying
-    "05": "Mining",
-    "06": "Oil & Gas",
-    "07": "Mining",
-    "08": "Mining",
-    "09": "Mining",
-    # Manufacturing
-    "10": "Food & Beverages",
-    "11": "Beverages",
-    "12": "Tobacco",
-    "13": "Textiles",
-    "14": "Apparel",
-    "15": "Leather",
-    "16": "Wood",
-    "17": "Paper",
-    "18": "Printing",
-    "19": "Petroleum",
-    "20": "Chemicals",
-    "21": "Pharmaceuticals",
-    "22": "Rubber & Plastics",
-    "23": "Non-metallic Minerals",
-    "24": "Metals",
-    "25": "Metal Products",
-    "26": "Electronics",
-    "27": "Electrical Equipment",
-    "28": "Machinery",
-    "29": "Motor Vehicles",
-    "30": "Transport Equipment",
-    "31": "Furniture",
-    "32": "Other Manufacturing",
-    "33": "Repair & Installation",
-    # Utilities
-    "35": "Energy",
-    "36": "Water",
-    "37": "Sewerage",
-    "38": "Waste Management",
-    "39": "Remediation",
-    # Construction
-    "41": "Construction",
-    "42": "Civil Engineering",
-    "43": "Specialized Construction",
-    # Wholesale and retail trade
-    "45": "Motor Vehicle Trade",
-    "46": "Wholesale Trade",
-    "47": "Retail Trade",
-    # Transportation and storage
-    "49": "Land Transport",
-    "50": "Water Transport",
-    "51": "Air Transport",
-    "52": "Warehousing",
-    "53": "Postal & Courier",
-    # Accommodation and food service
-    "55": "Accommodation",
-    "56": "Food Service",
-    # Information and communication
-    "58": "Publishing",
-    "59": "Motion Pictures",
-    "60": "Broadcasting",
-    "61": "Telecommunications",
-    "62": "IT Services",
-    "63": "Information Services",
-    # Financial and insurance
-    "64": "Financial Services",
-    "65": "Insurance",
-    "66": "Auxiliary Financial",
-    # Real estate
-    "68": "Real Estate",
-    # Professional, scientific and technical
-    "69": "Legal & Accounting",
-    "70": "Management Consulting",
-    "71": "Architecture & Engineering",
-    "72": "R&D",
-    "73": "Advertising",
-    "74": "Other Professional",
-    "75": "Veterinary",
-    # Administrative and support
-    "77": "Rental & Leasing",
-    "78": "Employment",
-    "79": "Travel Agencies",
-    "80": "Security",
-    "81": "Services to Buildings",
-    "82": "Office Administration",
-    # Public administration
-    "84": "Public Administration",
-    # Education
-    "85": "Education",
-    # Human health and social work
-    "86": "Human Health",
-    "87": "Residential Care",
-    "88": "Social Work",
-    # Arts, entertainment and recreation
-    "90": "Creative Arts",
-    "91": "Libraries & Archives",
-    "92": "Gambling",
-    "93": "Sports & Recreation",
-    # Other service activities
-    "94": "Membership Organizations",
-    "95": "Repair Services",
-    "96": "Personal Services",
-    # Activities of households
-    "97": "Household Activities",
-    "98": "Household Activities",
-    # Extraterritorial organizations
-    "99": "Extraterritorial",
-}
+# ============================================================================
+# Main Extraction Function
+# ============================================================================
 
 
-def get_industry_category(nace_code: str | None) -> str:
-    """Map NACE code to industry category."""
-    if not nace_code:
-        return "unknown"
+def extract_company_features(
+    research: CompanyResearchResult | None,
+    match: CompanyMatchResult | None,
+    details: OrbisCompanyDetails | None,
+) -> CompanyFeatures:
+    """Extract categorized features from company enrichment data.
 
-    # Use first 2 digits for broad category
-    category_code = nace_code[:2] if len(nace_code) >= 2 else nace_code
-    return NACE_INDUSTRY_MAPPING.get(category_code, "unknown")
+    Orchestrates domain-specific extractors, each handling their own
+    data resolution with priority: details > match > research.
 
-
-def get_financial_health(financials: any) -> str:
-    """
-    Assess financial health based on financial indicators.
+    Args:
+        research: Web research results (company info scraped from web)
+        match: Orbis matching results (company match from database)
+        details: Orbis company details (full company record)
 
     Returns:
-        Financial health indicator: 'healthy', 'moderate', 'at_risk', or 'unknown'
+        CompanyFeatures with all domains populated
     """
-    if not financials or not financials.has_data():
+    return CompanyFeatures(
+        identifiers=_extract_identifiers(research, match, details),
+        info=_extract_info(research, match, details),
+        status=_extract_status(details),
+        industry=_extract_industry(research, match, details),
+        match=_extract_match_metadata(match),
+        employees=_extract_employees(details),
+        financials=_extract_financials(details),
+    )
+
+
+# ============================================================================
+# Domain-Specific Extractors
+# ============================================================================
+
+
+def _extract_identifiers(
+    research: CompanyResearchResult | None,
+    match: CompanyMatchResult | None,
+    details: OrbisCompanyDetails | None,
+) -> CompanyIdentifiers:
+    """Extract company identifiers with priority: details > match > research."""
+
+    # Orbis/BvD IDs: only from Orbis sources
+    orbis_id = details.orbis_id if details else None
+    bvd_id = details.bvd_id if details else (match.company.bvd_id if match and match.company else None)
+
+    # National ID: details > match > research
+    national_id = None
+    vat_number = None
+
+    if details and details.national_id:
+        for item in details.national_id:
+            label = item.get("label", "")
+            value = item.get("value")
+            if label == "VAT number":
+                vat_number = value
+            elif value and not national_id:  ## TODO: inspect how many national_ids we can have
+                national_id = value
+
+    if not national_id and match and match.company:
+        national_id = match.company.national_id
+
+    if not national_id and research:
+        national_id = research.national_id
+
+    return CompanyIdentifiers(
+        orbis_id=orbis_id,
+        bvd_id=bvd_id,
+        national_id=national_id,
+        vat_number=vat_number,
+    )
+
+
+def _extract_info(
+    research: CompanyResearchResult | None,
+    match: CompanyMatchResult | None,
+    details: OrbisCompanyDetails | None,
+) -> CompanyInfo:
+    """Extract basic company info with priority: details > match > research."""
+
+    # Name: details > match > research
+    name = (
+        details.name
+        if details
+        else (match.company.name if match and match.company else (research.name if research else None))
+    )
+
+    # Address: primarily from details
+    address = _extract_address(research, match, details)
+
+    # Website/Domain: details > match > research
+    website = None
+    domain = None
+
+    if details and details.address and details.address.websites:
+        website = details.address.websites[0]
+        domain = _normalize_domain(website)
+    elif match and match.company and match.company.email_or_website:
+        website = match.company.email_or_website
+        domain = _normalize_domain(website)
+    elif research and research.domain:
+        domain = research.domain
+        website = f"https://{domain}" if not domain.startswith("http") else domain
+
+    # Description: only from research (Orbis doesn't have this)
+    description = research.description if research else None
+
+    # Email domain type
+    email_domain_type = get_email_domain_type(domain)
+
+    return CompanyInfo(
+        name=name,
+        address=address,
+        website=website,
+        domain=domain,
+        email_domain_type=email_domain_type,
+        description=description,
+    )
+
+
+def _extract_address(
+    research: CompanyResearchResult | None,
+    match: CompanyMatchResult | None,
+    details: OrbisCompanyDetails | None,
+) -> CompanyAddress:
+    """Extract address with priority: details > match > research."""
+
+    if details and details.address:
+        addr = details.address
+        return CompanyAddress(
+            street=addr.street1,
+            city=addr.city,
+            postal_code=addr.postal_code,
+            state=addr.state,
+            country=None,
+            country_code=addr.country_code,
+            phone=addr.phone,
+        )
+
+    if match and match.company:
+        company = match.company
+        return CompanyAddress(
+            street=company.address,
+            city=company.city,
+            postal_code=company.postcode,
+            state=company.state,
+            country=None,
+            country_code=company.country,
+            phone=company.phone_or_fax,
+        )
+
+    if research:
+        return CompanyAddress(
+            street=research.address,
+            city=research.city,
+            postal_code=research.postal_code,
+            state=None,
+            country=research.country,
+            country_code=research.country_code,
+            phone=None,
+        )
+
+    return CompanyAddress()
+
+
+def _extract_status(details: OrbisCompanyDetails | None) -> CompanyStatus:
+    """Extract company legal and operational status from Orbis details."""
+
+    if not details:
+        return CompanyStatus()
+
+    legal_status = details.legal_status
+    consolidation_code = details.consolidation_code
+
+    # Determine if company is active based on legal_status
+    # Orbis codes: 1 = Active, 2 = Active (default of reorganization), 3+ = Inactive/other
+    is_active = legal_status in ("1", "2") if legal_status else True
+
+    return CompanyStatus(
+        legal_status=legal_status,
+        consolidation_code=consolidation_code,
+        is_active=is_active,
+    )
+
+
+def _extract_industry(
+    research: CompanyResearchResult | None,
+    match: CompanyMatchResult | None,
+    details: OrbisCompanyDetails | None,
+) -> CompanyIndustry:
+    """Extract industry classification."""
+
+    # NACE code: only from Orbis
+    nace_code = details.nace_code if details else None
+
+    # Industry description: prefer research (more detailed), fallback to match
+    description = research.industry if research else (match.industry if match else None)
+
+    # Category: mapped from NACE, or fall back to research description
+    category = get_industry_category(nace_code)
+    if category == "unknown" and description:
+        # Use first part of description as fallback category
+        category = description.split(";")[0].strip() if ";" in description else description
+
+    return CompanyIndustry(
+        description=description,
+        nace_code=nace_code,
+        category=category,
+    )
+
+
+def _extract_match_metadata(match: CompanyMatchResult | None) -> CompanyMatchMetadata:
+    """Extract match metadata from Orbis matching."""
+
+    if not match:
+        return CompanyMatchMetadata()
+
+    score = match.company.score if match.company else None
+
+    return CompanyMatchMetadata(
+        confidence=match.confidence,
+        score=score,
+        candidates_considered=match.total_candidates,
+        notes=match.reasoning,
+    )
+
+
+def _extract_employees(details: OrbisCompanyDetails | None) -> CompanyEmployees:
+    """Extract employee information from Orbis details."""
+
+    if not details:
+        return CompanyEmployees()
+
+    count = details.employees
+
+    return CompanyEmployees(
+        count=count,
+        bracket=get_employees_bracket(count),
+    )
+
+
+def _extract_financials(details: OrbisCompanyDetails | None) -> CompanyFinancials:
+    """Extract financial metrics from Orbis details."""
+
+    if not details or not details.financials:
+        return CompanyFinancials()
+
+    fin = details.financials
+
+    # Determine if any financial data exists
+    has_data = (
+        fin.has_data()
+        if hasattr(fin, "has_data")
+        else any(
+            [
+                fin.operating_revenue,
+                fin.profit_before_tax,
+                fin.profit_loss,
+                fin.cash_flow,
+                fin.total_assets,
+                fin.shareholders_funds,
+            ]
+        )
+    )
+
+    # Financial health assessment
+    financial_health = _assess_financial_health(fin)
+
+    # Accounting year
+    accounting_year = fin.accounting_year.strftime("%Y-%m-%d") if fin.accounting_year else "unknown"
+
+    return CompanyFinancials(
+        # Raw values
+        revenue=fin.operating_revenue,
+        profit_before_tax=fin.profit_before_tax,
+        profit_loss=fin.profit_loss,
+        cash_flow=fin.cash_flow,
+        total_assets=fin.total_assets,
+        shareholders_funds=fin.shareholders_funds,
+        # Brackets
+        revenue_bracket=get_revenue_bracket(fin.operating_revenue),
+        profit_bracket=get_profit_before_tax_bracket(fin.profit_before_tax),
+        assets_bracket=get_total_assets_bracket(fin.total_assets),
+        # Derived
+        accounting_year=accounting_year,
+        financial_health=financial_health,
+        has_data=has_data,
+    )
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _assess_financial_health(financials) -> str:
+    """Assess financial health based on financial indicators.
+
+    Returns:
+        'healthy', 'moderate', 'at_risk', or 'unknown'
+    """
+    if not financials:
+        return "unknown"
+
+    has_data = (
+        financials.has_data()
+        if hasattr(financials, "has_data")
+        else any(
+            [
+                financials.profit_before_tax,
+                financials.profit_loss,
+                financials.cash_flow,
+            ]
+        )
+    )
+
+    if not has_data:
         return "unknown"
 
     profit_positive = (financials.profit_before_tax is not None and financials.profit_before_tax > 0) or (
@@ -158,152 +358,28 @@ def get_financial_health(financials: any) -> str:
 
     cash_flow_positive = financials.cash_flow is not None and financials.cash_flow > 0
 
-    # Healthy: positive profit and positive cash flow
     if profit_positive and cash_flow_positive:
         return "healthy"
-
-    # At risk: negative profit and negative cash flow
     if not profit_positive and not cash_flow_positive:
         return "at_risk"
 
-    # Moderate: mixed indicators
     return "moderate"
 
 
-def extract_company_features(
-    research: CompanyResearchResult | None,
-    match: CompanyMatchResult | None,
-    details: OrbisCompanyDetails | None,
-) -> CompanyFeatures:
-    """Extract categorized features from the entire CompanyEnrichmentResult."""
+def _normalize_domain(url: str | None) -> str | None:
+    """Extract domain from URL or website string."""
+    if not url:
+        return None
 
-    # ===== Identifiers =====
-    orbis_id = details.orbis_id if details else None
-    bvd_id = details.bvd_id if details else (match.company.bvd_id if match and match.company else None)
-    vat_number = None
-    national_id = None
+    domain = url.lower().strip()
 
-    # Extract VAT number and national_id from details
-    if details and details.national_id:
-        for item in details.national_id:
-            if item.get("label") == "VAT number" and item.get("value"):
-                vat_number = item.get("value")
-            elif item.get("value"):
-                national_id = item.get("value") or national_id
+    # Remove protocol
+    for prefix in ["https://", "http://", "www."]:
+        if domain.startswith(prefix):
+            domain = domain[len(prefix) :]
 
-    # Fall back to match national_id if not in details
-    if not national_id and match and match.company:
-        national_id = match.company.national_id
+    # Remove path
+    if "/" in domain:
+        domain = domain.split("/")[0]
 
-    # Fall back to research national_id
-    if not national_id and research:
-        national_id = research.national_id
-
-    # ===== Company Info =====
-    # Name: prefer details, then match, then research
-    name = (
-        details.name
-        if details
-        else (match.company.name if match and match.company else (research.name if research else None))
-    )
-
-    # Website/Domain: priority order
-    website = None
-    domain = None
-    if details and details.address and details.address.websites:
-        website = details.address.websites[0]
-        domain = website
-    elif research and research.domain:
-        domain = research.domain
-        website = f"https://{domain}" if not domain.startswith("http") else domain
-    elif match and match.company and match.company.email_or_website:
-        website = match.company.email_or_website
-        domain = website
-
-    email_domain_type = get_email_domain_type(domain)
-
-    # Industry: prefer research.industry (more descriptive), fall back to NACE category
-    industry = research.industry if research else None
-    main_industry = get_industry_category(details.nace_code if details else None)
-    if not main_industry or main_industry == "unknown":
-        main_industry = industry or "unknown"
-
-    # ===== Match Metadata =====
-    match_confidence = match.confidence if match else "very_low"
-    match_score = match.company.score if match and match.company else None
-    match_rating = get_match_rating(match_score)
-
-    # ===== Employees =====
-    employees = details.employees if details else None
-    employees_bracket = get_employees_bracket(employees)
-
-    # ===== Financials =====
-    financials = details.financials if details else None
-
-    revenue = financials.operating_revenue if financials else None
-    revenue_bracket = get_revenue_bracket(revenue)
-
-    cash_flow = financials.cash_flow if financials else None
-    cash_flow_bracket = get_cash_flow_bracket(cash_flow)
-
-    profit_before_tax = financials.profit_before_tax if financials else None
-    profit_before_tax_bracket = get_profit_before_tax_bracket(profit_before_tax)
-
-    profit_loss = financials.profit_loss if financials else None
-    profit_loss_bracket = get_profit_loss_bracket(profit_loss)
-
-    shareholders_funds = financials.shareholders_funds if financials else None
-    shareholders_funds_bracket = get_shareholders_funds_bracket(shareholders_funds)
-
-    total_assets = financials.total_assets if financials else None
-    total_assets_bracket = get_total_assets_bracket(total_assets)
-
-    accounting_year = (
-        financials.accounting_year.strftime("%Y-%m-%d") if financials and financials.accounting_year else "unknown"
-    )
-
-    financial_health = get_financial_health(financials)
-    has_financial_data = financials.has_data() if financials else False
-
-    # ===== Industry Category =====
-    industry_category = get_industry_category(details.nace_code if details else None)
-
-    return CompanyFeatures(
-        # Identifiers
-        orbis_id=orbis_id,
-        bvd_id=bvd_id,
-        vat_number=vat_number,
-        national_id=national_id,
-        # Company Info
-        name=name,
-        website=website,
-        domain=domain,
-        email_domain_type=email_domain_type,
-        industry=industry,
-        main_industry=main_industry,
-        # Match Metadata
-        match_confidence=match_confidence,
-        match_score=match_score,
-        match_rating=match_rating,
-        # Employees
-        employees=employees,
-        employees_bracket=employees_bracket,
-        # Financials with brackets
-        revenue=revenue,
-        revenue_bracket=revenue_bracket,
-        cash_flow=cash_flow,
-        cash_flow_bracket=cash_flow_bracket,
-        profit_before_tax=profit_before_tax,
-        profit_before_tax_bracket=profit_before_tax_bracket,
-        profit_loss=profit_loss,
-        profit_loss_bracket=profit_loss_bracket,
-        shareholders_funds=shareholders_funds,
-        shareholders_funds_bracket=shareholders_funds_bracket,
-        total_assets=total_assets,
-        total_assets_bracket=total_assets_bracket,
-        # Other
-        accounting_year=accounting_year,
-        financial_health=financial_health,
-        has_financial_data=has_financial_data,
-        industry_category=industry_category,
-    )
+    return domain or None

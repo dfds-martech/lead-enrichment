@@ -11,9 +11,11 @@ class OrbisCompanyAddress(BaseModel):
     street1: str | None
     street2: str | None
     city: str | None
+    state: str | None
     postal_code: str | None
     country_code: str | None  # ISO2 code
     websites: list[str] | None
+    phone: str | None = None
 
     @staticmethod
     def from_dict(data: dict) -> "OrbisCompanyAddress":
@@ -23,13 +25,19 @@ class OrbisCompanyAddress(BaseModel):
             or data.get("GLEIF_LEGAL_ADDRESS_POSTAL_CODE")
         )
 
+        # Phone comes as an array from Orbis - extract first element
+        phone_list = data.get("PHONE")
+        phone = phone_list[0] if phone_list else None
+
         return OrbisCompanyAddress(
             street1=data.get("ADDRESS_LINE1"),
             street2=data.get("ADDRESS_LINE2"),
             city=data.get("CITY"),
+            state=data.get("STATE"),
             postal_code=postal_code,
             country_code=data.get("COUNTRY_ISO_CODE"),
             websites=data.get("WEBSITE", []),
+            phone=phone,
         )
 
     def __str__(self) -> str:
