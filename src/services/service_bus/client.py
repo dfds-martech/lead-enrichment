@@ -1,13 +1,13 @@
 import json
 from datetime import datetime
 
+from azure.identity import ClientSecretCredential
 from azure.servicebus import ServiceBusClient as AzureServiceBusClient
 from azure.servicebus import ServiceBusMessage
 
 from common.config import config
 from common.logging import get_logger
 from models.lead import Lead
-from pipeline.orchestrator import PipelineOrchestrator
 
 logger = get_logger(__name__)
 
@@ -16,11 +16,38 @@ class ServiceBusClient:
     """Service Bus listener for processing lead events."""
 
     def __init__(self):
-        self.conn_str = config.SERVICE_BUS_CONNECTION_STRING
+        # Set topic and subscription
         self.topic_name = config.SERVICE_BUS_TOPIC_NAME
-        self.subscription_name = "lead-enrich"
-        self.client = AzureServiceBusClient.from_connection_string(self.conn_str)
-        self.orchestrator = PipelineOrchestrator(service_bus=self)
+        self.subscription_name = config.SERVICE_BUS_SUBSCRIPTION_NAME
+
+        # Create Azure AD credential
+        credential = ClientSecretCredential(
+            tenant_id=config.AZURE_TENANT_ID,
+            client_id=config.AZURE_CLIENT_ID,
+            client_secret=config.AZURE_CLIENT_SECRET.get_secret_value(),
+        )
+
+        # Create Service Bus client
+        self.client = AzureServiceBusClient(
+            fully_qualified_namespace=config.SERVICE_BUS_NAMESPACE, credential=credential
+        )
+
+    def get_messages(self, max_count: int = 5) -> list[dict]:
+        """Get some messags from the queue without removing (for testing)"""
+        messages = []
+        with self.client:
+            receiver = self.client.get_subscription_receiver(
+                topic_name=self.topic_name, subscription_name=self.subscription_name
+            )
+            with receiver:
+                peeked = receiver.peek_messages(max_message_count=max_count)
+                for msg in peeked:
+                    try:
+                        body = json.loads(str(msg))
+                        messages.append(body)
+                    except json.JSONDecodeError:
+                        messages.append({"raw": str(msg)})
+        return messages
 
     async def _handle_message(self, message):
         """Process a single message from the queue."""

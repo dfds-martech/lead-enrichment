@@ -24,8 +24,12 @@ class Config(BaseSettings):
     SEGMENT_SPACE_ID: SecretStr = SecretStr("")
 
     # Service Bus
-    SERVICE_BUS_CONNECTION_STRING: SecretStr = SecretStr("")
-    SERVICE_BUS_TOPIC_NAME: str = "lead-events"
+    AZURE_TENANT_ID: str = ""
+    AZURE_CLIENT_ID: str = ""
+    AZURE_CLIENT_SECRET: SecretStr = SecretStr("")
+    SERVICE_BUS_NAMESPACE: str = ""
+    SERVICE_BUS_TOPIC_NAME: str = ""
+    SERVICE_BUS_SUBSCRIPTION_NAME: str = ""
 
     # OpenAI
     AZURE_GIT_TOKEN: str = ""
