@@ -126,50 +126,50 @@ class CompanyEnricher:
         company_match = None
         company_details = None
         features = None
-        error = None
+        errors: list[str] = []
 
+        # Stage 1: Research (best effort)
         try:
-            # Stage 1: Research (best effort - failures don't stop the pipeline)
-            try:
-                company_research = await self._research(criteria)
-            except Exception as e:
-                logger.warning(f"[Enrichment] Research failed, continuing: {type(e).__name__}: {e!r}")
+            company_research = await self._research(criteria)
+        except Exception as e:
+            errors.append(f"research: {type(e).__name__}: {e}")
+            logger.warning(f"[Enrichment] Research failed: {e!r}")
 
-            # Stage 2: Company Match
+        # Stage 2: Company Match (best effort)
+        try:
             company_match = await self._match(criteria, company_research)
+        except Exception as e:
+            errors.append(f"match: {type(e).__name__}: {e}")
+            logger.warning(f"[Enrichment] Match failed: {e!r}")
 
-            # Stage 3: Company Details
-            if company_match.company:
+        # Stage 3: Company Details (best effort)
+        if company_match and company_match.company:
+            try:
                 company_details = await self._fetch_details(company_match.company.bvd_id)
+            except Exception as e:
+                errors.append(f"details: {type(e).__name__}: {e}")
+                logger.warning(f"[Enrichment] Details fetch failed: {e!r}")
 
-            # Stage 4: Feature Extraction
+        # Stage 4: Feature Extraction (best effort)
+        try:
             features = extract_company_features(company_research, company_match, company_details)
+        except Exception as e:
+            errors.append(f"features: {type(e).__name__}: {e}")
+            logger.warning(f"[Enrichment] Feature extraction failed: {e!r}")
 
+        # Log final status
+        if errors:
+            logger.warning(f"[Enrichment] Completed with {len(errors)} error(s): {errors}")
+        else:
             logger.info("[Enrichment] Completed successfully")
 
-        except RuntimeError as e:
-            # RuntimeError from handle_openai_errors contains formatted OpenAI error message
-            error = str(e)
-            logger.error(f"[Enrichment] OpenAI API error: {error}", exc_info=True)
-
-        except Exception as e:
-            # Log full exception details for debugging
-            logger.error(
-                f"[Enrichment] Failed: {type(e).__name__}: {e!r}",
-                exc_info=True,
-                extra={
-                    "error_type": type(e).__name__,
-                    "error_str": str(e),
-                    "error_repr": repr(e),
-                    "company_name": criteria.name,
-                },
-            )
-            error = f"{type(e).__name__}: {e}"
+        # TODO: when do we actually fail a company enrichment?
+        # We need to make some kind of decision on what to do when we have errors.
 
         return CompanyEnrichmentResult(
             research=company_research,
             match=company_match,
             details=company_details,
             features=features,
-            error=error,
+            error="; ".join(errors) if errors else None,
         )
