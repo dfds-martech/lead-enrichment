@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
 
     # Cleanup on Shutdown
     logger.info("Application shutting down...")
-    await service_bus._flush_bq_batch()
+    await service_bus.flush_all()
     
     listener_task.cancel()
     try:
