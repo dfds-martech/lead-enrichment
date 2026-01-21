@@ -1,0 +1,77 @@
+{
+  "@odata.context": "https://dfdscrmdev.crm4.dynamics.com/api/data/v9.2/$metadata#dfds_equipmentgroups(dfds_description,dfds_descriptionlmm,dfds_equipmentgroupcode,dfds_equipmentgroupid,dfds_name)",
+  "value": [
+    {
+      "@odata.etag": "W/\"77842125\"",
+      "dfds_descriptionlmm": "**Equipment Group: Trailer**\n\nThis equipment group encompasses a wide variety of trailer types commonly used in large-scale logistics and ferry freight operations. Equipment types within this group include, but are not limited to: standard box trailers, curtain-sided trailers, refrigerated (reefer) trailers, flatbed trailers, low-loader trailers, skeletal trailers, and extendable trailers. It also covers specialized trailers such as car carriers, container chassis, and tank trailers. Naming conventions for these equipment types may include designations based on length (e.g., 20ft, 40ft, 45ft trailers), function (e.g., swap body, mega trailer, double-decker trailer), and configuration (e.g., tandem axle, tri-axle, jumbo trailer). This group is essential for the transport of a diverse range of cargo, including containers, vehicles, bulk goods, and oversized freight, supporting flexible and efficient movement across road and ferry networks.",
+      "dfds_name": "Trailer",
+      "dfds_equipmentgroupid": "3c9cb517-bc58-f011-877b-000d3abbba63",
+      "dfds_equipmentgroupcode": "TRA",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842092\"",
+      "dfds_descriptionlmm": "Equipment Group: Car\n\nDescription:  \nThe \"Car\" equipment group encompasses a wide variety of vehicle types and related transport equipment commonly used in large-scale logistics and ferry freight operations. This group includes, but is not limited to, standard passenger cars, SUVs, vans, and light commercial vehicles. It also covers specialized equipment such as car chassis, car carriers, and car transport trailers (including single, double, and multi-level car carriers). Naming conventions within this group may include terms like \"car chassis,\" \"auto transporter,\" \"vehicle carrier,\" \"car trailer,\" \"passenger vehicle,\" and \"light vehicle.\" The group may also include equipment designed for the secure loading, unloading, and ferrying of cars, such as moblifts and vehicle ramps. This broad classification ensures that all equipment types related to the movement and handling of cars and similar vehicles are grouped together for efficient cargo classification and logistics planning.",
+      "dfds_name": "Car",
+      "dfds_equipmentgroupid": "d5339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "CAR",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842096\"",
+      "dfds_descriptionlmm": "Equipment Group: Cassette\n\nDescription:  \nThe Cassette equipment group encompasses a diverse range of equipment types primarily designed for the efficient handling, transport, and storage of cargo in large-scale logistics and ferry freight operations. This group typically includes various forms of cassettes—robust, flat, load-carrying platforms engineered to facilitate rapid loading and unloading of goods, especially in roll-on/roll-off (RoRo) environments. Equipment types within this group may be referred to as cassettes, cargo cassettes, RoRo cassettes, and load cassettes, and can vary in length, width, and weight capacity to accommodate different cargo profiles.\n\nCommon equipment types and naming conventions in the Cassette group include:\n- Standard cassettes (e.g., 13.6m cassette, 45ft cassette)\n- Heavy-duty cassettes for bulk or oversized cargo\n- Specialized cassettes for containers, timber, steel coils, or paper reels\n- Multi-purpose cassettes compatible with moblifts, translifters, and terminal tractors\n- RoRo cassettes designed for ferry and terminal operations\n- Custom-length cassettes (e.g., 12m, 14m, 16m cassettes)\n- Cassettes with integrated securing systems or twistlocks for containerized loads\n\nThis group may also include equipment that supports cassette operations, such as translifters, moblifts, and cassette handling trailers. The Cassette group is essential for optimizing cargo flow, reducing turnaround times, and ensuring safe, flexible transport of a wide variety of freight types across terminals and vessels.",
+      "dfds_name": "Cassette",
+      "dfds_equipmentgroupid": "d7339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "CAS",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842101\"",
+      "dfds_descriptionlmm": "Equipment Group: Chassi\n\nDescription:  \nThe \"Chassi\" equipment group encompasses a wide variety of chassis and related equipment types commonly used in large-scale logistics and ferry freight operations. This group includes standard container chassis, skeletal chassis, and specialized chassis designed to transport containers of various sizes such as 20-foot, 40-foot, and 45-foot containers. It also covers tank container chassis, flatbed chassis, extendable chassis, and multi-axle chassis for heavy or oversized loads. Naming conventions within this group may include terms like \"container chassis,\" \"skeletal trailer,\" \"tank chassis,\" \"flatbed chassis,\" \"gooseneck chassis,\" \"car chassis,\" and \"swap body chassis.\" The Chassi group supports the movement of a diverse range of cargo, including standard containers, tank containers, swap bodies, vehicles, and other freight units requiring a wheeled base for transport and ferry operations.",
+      "dfds_name": "Chassi",
+      "dfds_equipmentgroupid": "d9339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "CHA",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842104\"",
+      "dfds_descriptionlmm": "Equipment Group: Container\n\nDescription:  \nThe \"Container\" equipment group encompasses a wide variety of containerized cargo transport units commonly used in large-scale logistics and ferry freight operations. This group includes, but is not limited to, standard dry containers (such as 20-foot, 40-foot, and 45-foot containers), high cube containers, open-top containers, flat rack containers, and refrigerated (reefer) containers. It also covers specialized units like tank containers for liquid cargo, bulk containers, and swap bodies. Naming conventions for these equipment types may include terms such as \"container 20\", \"container 40HC\", \"tank container\", \"reefer 45\", \"open top 40\", and \"flat rack 20\". The group may also include containers designed for specific cargo types or operational requirements, such as ventilated containers, insulated containers, and platform containers. This broad range ensures compatibility with various cargo classifications and transport needs within the logistics and ferry freight industry.",
+      "dfds_name": "Container",
+      "dfds_equipmentgroupid": "dd339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "CON",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842109\"",
+      "dfds_descriptionlmm": "**Driveable Unit** is an equipment group that encompasses a wide range of self-propelled and towable vehicles commonly used in large-scale logistics and ferry freight operations. This group includes, but is not limited to, equipment types such as trucks, tractor units, articulated lorries, rigid lorries, vans, and various types of powered vehicles designed for cargo transport. It also covers specialized driveable equipment like car carriers, car chassis, and moblifts. Naming conventions for these equipment types may include terms such as \"tractor,\" \"prime mover,\" \"rigid truck,\" \"articulated truck,\" \"van,\" \"car transporter,\" \"chassis cab,\" and \"self-propelled unit.\" The Driveable Unit group is essential for the movement of cargo that requires powered vehicles, either for direct delivery or for ferry transport, and may also include vehicles with varying axle configurations, lengths, and load capacities. This group is distinct from non-powered equipment such as containers or trailers, focusing specifically on units that can be driven or towed under their own power.",
+      "dfds_name": "Driveable Unit",
+      "dfds_equipmentgroupid": "df339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "DAC",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842112\"",
+      "dfds_descriptionlmm": "Equipment Group: Flat\n\nDescription:  \nThe \"Flat\" equipment group encompasses a wide variety of flatbed-style transport units commonly used in large-scale logistics and ferry freight operations. This group includes equipment types designed for carrying oversized, heavy, or irregularly shaped cargo that cannot be accommodated in standard enclosed containers. Typical equipment types within this group include:\n\n- Flatbeds (standard, extendable, and low-loader variants)\n- Platform trailers (including 20ft, 30ft, 40ft, 45ft, and 53ft lengths)\n- Skeletal trailers and chassis for container transport\n- Drop-deck and step-deck trailers\n- Moblifts and roll trailers\n- Car carriers and car chassis\n- Open-deck trailers\n- Flat rack containers (20ft, 40ft, 45ft)\n- Heavy-duty flat wagons\n- Multi-axle flat trailers for abnormal loads\n\nNaming conventions for these equipment types may include terms such as \"flat,\" \"platform,\" \"skeletal,\" \"open deck,\" \"drop deck,\" \"step deck,\" \"flat rack,\" \"car chassis,\" and specific length or capacity indicators (e.g., \"Flatbed 45,\" \"Platform 40ft,\" \"Skeletal Trailer 20ft\"). This group is essential for the flexible and efficient movement of cargo that requires open, accessible loading surfaces and is not suited for enclosed or tank containers.",
+      "dfds_name": "Flat",
+      "dfds_equipmentgroupid": "e7339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "FLA",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842117\"",
+      "dfds_descriptionlmm": "Equipment Group: Other\n\nDescription:  \nThe \"Other\" equipment group encompasses a diverse range of equipment types that do not fall under standard container, trailer, or vehicle categories commonly used in logistics and ferry freight operations. This group includes specialized, uncommon, or miscellaneous equipment types that support unique cargo requirements or operational needs. Examples of equipment types within this group may include, but are not limited to: custom-built containers, non-standard container sizes (such as 10ft, 22ft, or 53ft containers), swap bodies, mobile lifts (moblifts), flat racks, platform trailers, extendable trailers, car chassis, car carriers, tank containers of various capacities, bulk containers, refrigerated units (reefers) with non-standard dimensions, roll trailers, MAFI trailers, and other specialized handling equipment. Naming conventions for these equipment types may vary and include terms such as \"special equipment,\" \"miscellaneous unit,\" \"custom chassis,\" \"oversized platform,\" or \"project cargo carrier.\" This group serves as a catch-all category for equipment types that are not easily classified under more common groupings, ensuring comprehensive coverage for all cargo classification needs.",
+      "dfds_name": "Other",
+      "dfds_equipmentgroupid": "e9339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "OTH",
+      "dfds_description": null
+    },
+    {
+      "@odata.etag": "W/\"77842120\"",
+      "dfds_descriptionlmm": "**Equipment Group: Shuttlewaggon**\n\nThe Shuttlewaggon equipment group encompasses a diverse range of rolling and intermodal transport units commonly used in large-scale logistics and ferry freight operations. This group typically includes various types of shuttle wagons, rail wagons, and specialized intermodal wagons designed for efficient transfer of cargo between rail, road, and ferry systems. Equipment types within this group may be referred to by names such as shuttle wagon, shuttlewaggon, rail shuttle, intermodal wagon, and ferry wagon. Variations can include different lengths and capacities, such as 20-foot, 30-foot, 40-foot, and 45-foot shuttle wagons, as well as low-bed and high-bed configurations. The group may also cover specialized wagons for transporting containers, swap bodies, tank containers, flat racks, and even car-carrying wagons or chassis. Naming conventions can vary by region and operator, including terms like shuttle car, rail platform, or intermodal flat. This equipment group is essential for seamless cargo movement across multiple transport modes, supporting efficient and flexible logistics solutions.",
+      "dfds_name": "Shuttlewaggon",
+      "dfds_equipmentgroupid": "f3339dac-6c77-f011-b4cc-7c1e52728228",
+      "dfds_equipmentgroupcode": "SWS",
+      "dfds_description": null
+    }
+  ]
+}
