@@ -114,7 +114,6 @@ class LeadQuote(BaseModel):
     def to_prompt(self) -> str:
         """Convert quote fields to prompt format for LLM extraction."""
         sections = []
-
         form_fields = []
 
         if self.request_type:
