@@ -20,16 +20,24 @@ class Config(BaseSettings):
     SERPER_API_KEY: SecretStr = SecretStr("")
 
     # Segment (user profiles)
+    SEGMENT_WRITE_KEY_ID: str = ""
     SEGMENT_API_KEY: SecretStr = SecretStr("")
     SEGMENT_SPACE_ID: SecretStr = SecretStr("")
 
     # Service Bus
     AZURE_TENANT_ID: str = ""
-    AZURE_CLIENT_ID: str = ""
+    AZURE_CLIENT_ID: str = ""   
     AZURE_CLIENT_SECRET: SecretStr = SecretStr("")
     SERVICE_BUS_NAMESPACE: str = ""
     SERVICE_BUS_TOPIC_NAME: str = ""
     SERVICE_BUS_SUBSCRIPTION_NAME: str = ""
+
+    # GCP & BigQuery 
+    GCPPROJECTID: str = "" # Used for Secret Manager project path
+    BQPROJECTID: str = ""
+    BQDATASETID: str = ""
+    BQTABLEID: str = ""
+
 
     # OpenAI
     AZURE_GIT_TOKEN: str = ""
