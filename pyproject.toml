@@ -40,6 +40,9 @@ dependencies = [
     "pycountry>=24.6.1",
     "playwright>=1.56.0",
     "azure-servicebus>=7.14.3",
+    # GCP
+    "google-cloud-bigquery>=3.40.0",
+    "google-cloud-secret-manager>=2.26.0",
 ]
 
 [project.scripts]
