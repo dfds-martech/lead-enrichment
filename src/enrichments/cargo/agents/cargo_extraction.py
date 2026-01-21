@@ -21,6 +21,9 @@ from services.azure_openai_service import AzureOpenAIService
 Urgency = Literal["immediate", "soon", "normal", "flexible"]
 Frequency = Literal["one_off", "weekly", "bi_monthly", "monthly", "quarterly", "few_per_year", "annual"]
 PartnershipNeeds = Literal["one_off", "test_run", "long_term"]
+EquipmentGroup = Literal[
+    "trailer", "car", "cassette", "chassi", "container", "driveable unit", "flat", "other", "shuttlewaggon", "other"
+]
 
 
 class CargoExtractionResult(BaseModel):
@@ -32,6 +35,10 @@ class CargoExtractionResult(BaseModel):
     )
     unit_type: str | None = Field(None, description="Type of unit (e.g., pallet, container, box)")
     unit_count: int | None = Field(None, description="Number of units")
+    equipment_group: EquipmentGroup | None = Field(
+        None,
+        description="Best matched equipment type for the cargo",
+    )
 
     # Timing
     urgency: Urgency | None = Field(None, description="How soon transport is needed")
@@ -53,8 +60,8 @@ You receive user-provided form field inputs and cargo descriptions. Extract the 
 
 <CARGO>
 1. **commodity_type**: What type of commodity is being transported?
-   - Examples: "fresh fish", "electronics", "machinery", "textiles", "chemicals"
-   - Be specific but concise
+   - Focus on general but specific commodity types.
+   - Examples: "fish", "electronics", "machinery", "textiles", "chemicals"
    - Return null if not mentioned
 
 2. **unit_type**: What is the unit/packaging type?
@@ -64,6 +71,22 @@ You receive user-provided form field inputs and cargo descriptions. Extract the 
 3. **unit_count**: How many units?
    - Return as an integer
    - Return null if not mentioned or unclear
+
+4. **equipment_group**: Select the equipment category that best fits the cargo and transport mode.
+   - Choose ONE from: ["Trailer", "Car", "Cassette", "Chassi", "Container", "Driveable Unit", "Flat", "Other", "Shuttlewaggon"]
+
+   Decision guide:
+   - **Container**: User mentions "container", "20ft", "40ft", or {unit_type} indicates container
+   - **Trailer**: Standard cargo (pallets, boxes, food) in an enclosed/curtain trailer. Most common default.
+   - **Driveable Unit**: Cargo includes a powered vehicle (truck with goods, van delivery)
+   - **Car**: Transporting passenger vehicles (new cars, used cars, SUVs)
+   - **Flat**: Oversized/heavy items: steel beams, pipes, machinery, timber, wind turbine parts
+   - **Chassi**: Container on a wheeled chassis (not full truck, just chassis + container)
+   - **Cassette**: Only if explicitly mentioned or known RoRo terminal operations
+   - **Shuttlewaggon**: Only if rail/intermodal is mentioned
+   - **Other**: Use if no clear fit can be determined
+
+    If temperature-controlled (fish, pharma, perishables): still use "Trailer" (reefer trailers are trailers)
 </CARGO>
 
 <TIMING>
