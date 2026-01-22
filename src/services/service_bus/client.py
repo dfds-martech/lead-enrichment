@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime
 
-from azure.identity import ClientSecretCredential
+from azure.identity.aio import ClientSecretCredential
 from azure.servicebus import ServiceBusMessage
 from azure.servicebus.aio import ServiceBusClient as AzureServiceBusClient
 from azure.servicebus.aio import ServiceBusReceiver
@@ -62,10 +62,12 @@ class ServiceBusClient:
     async def get_messages(self, max_count: int = 5) -> list[dict]:
         """Get some messages from the queue without removing (Async version for testing)."""
         messages = []
+
         # Create a receiver just for peeking
         receiver = self.client.get_subscription_receiver(
             topic_name=self.topic_name, subscription_name=self.subscription_name
         )
+
         async with receiver:
             # peek_messages is awaitable in the async client
             peeked = await receiver.peek_messages(max_message_count=max_count)
@@ -75,13 +77,14 @@ class ServiceBusClient:
                     messages.append(body)
                 except json.JSONDecodeError:
                     messages.append({"raw": str(msg)})
+
         return messages
 
     # --- Background Tasks ---
 
     async def _periodic_flusher(self):
         """Background task to trigger BigQuery flush periodically."""
-        logger.info("Starting periodic flusher.")
+        logger.info("[Bus] Starting periodic flusher.")
         while True:
             await asyncio.sleep(self.bq_flush_interval)
             await self.bq_service.flush()
@@ -95,10 +98,10 @@ class ServiceBusClient:
             event_body = json.loads(body_str)
             event_type = event_body.get("eventType")
 
-            logger.info(f"Event received: {event_type} | Processing...")
+            logger.info(f"[Bus] Event received: {event_type} | Processing...")
 
             if event_type not in ACCEPTED_EVENTS:
-                logger.warning(f"Event type '{event_type}' not accepted. Dead-lettering.")
+                logger.warning(f"[Bus] Event type '{event_type}' not accepted. Dead-lettering.")
                 await receiver.dead_letter_message(
                     message,
                     reason="UnknownEventType",
@@ -126,11 +129,11 @@ class ServiceBusClient:
                     pipeline_results = await self.orchestrator.run_pipeline(lead)
                     enrichment_result = pipeline_results
 
-                logger.info(f"Enrichment successful for lead {lead.id}")
+                logger.info(f"[Bus] Enrichment successful for lead {lead.id}")
                 event_body["enrichment"] = enrichment_result
 
             except Exception as enrich_err:
-                logger.error(f"Enrichment failed (continuing to archive raw event): {enrich_err}")
+                logger.error(f"[Bus] Enrichment failed (continuing to archive raw event): {enrich_err}")
                 event_body["enrichment_error"] = str(enrich_err)
 
             # --- STEP 2: DISPATCH (Side Effects) ---
@@ -158,7 +161,7 @@ class ServiceBusClient:
             await receiver.complete_message(message)
 
         except Exception as e:
-            logger.error(f"Processing failed for message {message.message_id}: {e}")
+            logger.error(f"[Bus] Processing failed for message {message.message_id}: {e}")
             # Message NOT completed -> Retry
 
     async def listen(self):
