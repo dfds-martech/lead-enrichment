@@ -28,7 +28,6 @@ class ServiceBusClient:
 
     def __init__(self):
         # --- 1. Clients Initialization ---
-
         # Azure Service Bus
         self.topic_name = config.SERVICE_BUS_TOPIC_NAME
         self.subscription_name = config.SERVICE_BUS_SUBSCRIPTION_NAME
@@ -48,7 +47,6 @@ class ServiceBusClient:
         # Initialize Dedicated Services
         self.bq_service = BigQueryClient()
         self.segment_service = SegmentClient()
-
         # Pipeline Orchestrator
         self.orchestrator = PipelineOrchestrator(service_bus=self)
 
@@ -68,7 +66,6 @@ class ServiceBusClient:
         receiver = self.client.get_subscription_receiver(
             topic_name=self.topic_name, subscription_name=self.subscription_name
         )
-
         async with receiver:
             # peek_messages is awaitable in the async client
             peeked = await receiver.peek_messages(max_message_count=max_count)
@@ -78,7 +75,6 @@ class ServiceBusClient:
                     messages.append(body)
                 except json.JSONDecodeError:
                     messages.append({"raw": str(msg)})
-
         return messages
 
     # --- Background Tasks ---

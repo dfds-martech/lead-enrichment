@@ -3,18 +3,19 @@
 FastAPI server for lead enrichment application.
 Deploy to Google Cloud Run.
 """
+
+# Load environment variables first
 import asyncio
 import os
 from contextlib import asynccontextmanager
 
+from agents import set_tracing_disabled
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
-from agents import set_tracing_disabled
 from common.logging import get_logger
-from services.service_bus.client import ServiceBusClient
-
 from routes import enrichment, health, scrape
+from services.service_bus.client import ServiceBusClient
 
 # Load environment variables first
 load_dotenv()
@@ -24,15 +25,16 @@ set_tracing_disabled(disabled=True)
 
 logger = get_logger("main")
 
+
 # Lifespan Manager (Background Listener)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Starts the Service Bus listener in the background."""
     logger.info("Application starting up... initializing Service Bus Listener.")
-    
+
     # Initialize Client
     service_bus = ServiceBusClient()
-    
+
     # Start the listener loop as a non-blocking background task
     listener_task = asyncio.create_task(service_bus.listen())
     logger.info("Service Bus listener started.")
@@ -41,15 +43,14 @@ async def lifespan(app: FastAPI):
 
     # Cleanup on Shutdown
     logger.info("Application shutting down...")
-    
-    # Flush any remaining data in buffers
     await service_bus.flush_all()
-    
+
     listener_task.cancel()
     try:
         await listener_task
     except asyncio.CancelledError:
         logger.info("Listener stopped gracefully.")
+
 
 # Initialize app with lifespan
 app = FastAPI(
@@ -81,5 +82,3 @@ if __name__ == "__main__":
         reload=False,  # Disable reload in production
         log_level="info",
     )
-
-
