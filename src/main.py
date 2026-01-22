@@ -1,24 +1,14 @@
-#!/usr/bin/env python3
-"""
-FastAPI server for lead enrichment application.
-Deploy to Google Cloud Run.
-"""
-
-# Load environment variables first
 import asyncio
 import os
 from contextlib import asynccontextmanager
 
 from agents import set_tracing_disabled
-from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from common.config import config
 from common.logging import get_logger
-from routes import enrichment, health, scrape
+from routes import enrichment, health, scrape, service_bus
 from services.service_bus.client import ServiceBusClient
-
-# Load environment variables first
-load_dotenv()
 
 # Disable OpenAI agents SDK tracing (as we are using azure openai)
 set_tracing_disabled(disabled=True)
@@ -38,6 +28,7 @@ async def lifespan(app: FastAPI):
     # Start the listener loop as a non-blocking background task
     listener_task = asyncio.create_task(service_bus.listen())
     logger.info("Service Bus listener started.")
+        app.state.service_bus = service_bus
 
     yield  # Application runs here
 
@@ -66,6 +57,7 @@ app = FastAPI(
 app.include_router(health.router)
 app.include_router(enrichment.router)
 app.include_router(scrape.router)
+app.include_router(service_bus.router)
 
 
 if __name__ == "__main__":
