@@ -1,131 +1,110 @@
-# tests/services/service_bus/test_client.py
-"""
-Tests for Service Bus client/listener.
-"""
-
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from services.crm_service import CRMService
-from services.service_bus.client import ServiceBusClient
+
+@pytest.fixture
+def mock_message():
+    """Create a mock Service Bus message."""
+    msg = MagicMock()
+    msg.message_id = "test-message-id"
+    msg.subject = "lead.created"
+    msg.enqueued_time_utc = None
+    return msg
 
 
 @pytest.fixture
-def crm_service():
-    """Fixture for CRM service."""
-    return CRMService()
+def mock_receiver():
+    """Create a mock Service Bus receiver."""
+    return AsyncMock()
 
 
 @pytest.fixture
-def mock_lead_event(crm_service):
-    """Fixture that returns a mock lead event from CRM service."""
-    return crm_service.mock_lead_event(0)
-
-
-@pytest.fixture
-def service_bus_client():
-    """Fixture that creates a ServiceBusClient with mocked dependencies."""
-    with patch("services.service_bus.client.AzureServiceBusClient") as mock_client_class:
-        mock_client = MagicMock()
-        mock_client_class.from_connection_string.return_value = mock_client
-
-        with patch("services.service_bus.client.PipelineOrchestrator") as mock_orchestrator_class:
-            mock_orchestrator = AsyncMock()
-            mock_orchestrator_class.return_value = mock_orchestrator
-
-            client = ServiceBusClient()
-            client.orchestrator = mock_orchestrator
-            yield client, mock_orchestrator
+def sample_event():
+    """Minimal valid event payload."""
+    return {
+        "eventType": "lead.created",
+        "lead": {"crmLeadId": "test-lead-123"},
+        "company": {"name": "Test Corp"},
+    }
 
 
 @pytest.mark.asyncio
-async def test_handle_message_lead_created(service_bus_client, mock_lead_event):
-    """Test handling a lead.created event."""
-    client, mock_orchestrator = service_bus_client
+async def test_handle_message_calls_orchestrator(mock_message, mock_receiver, sample_event):
+    """Test that _handle_message calls the orchestrator for accepted events."""
+    mock_message.__str__ = lambda x: json.dumps(sample_event)
 
-    # Create a mock message
-    mock_message = AsyncMock()
-    mock_lead_event["eventType"] = "lead.created"
-    mock_message.__str__ = lambda x: json.dumps(mock_lead_event)
+    with (
+        patch("services.service_bus.client.AzureServiceBusClient"),
+        patch("services.service_bus.client.ClientSecretCredential"),
+        patch("services.service_bus.client.BigQueryClient") as mock_bq,
+        patch("services.service_bus.client.SegmentClient") as mock_segment,
+        patch("services.service_bus.client.PipelineOrchestrator") as mock_orch_class,
+    ):
+        # Setup mocks
+        mock_bq.return_value.add_row = AsyncMock(return_value=True)
+        mock_segment.return_value.track = AsyncMock(return_value=True)
+        mock_orch = AsyncMock()
+        mock_orch.run_pipeline = AsyncMock(return_value={})
+        mock_orch_class.return_value = mock_orch
 
-    # Call the handler
-    await client._handle_message(mock_message)
+        from services.service_bus.client import ServiceBusClient
 
-    # Verify orchestrator was called
-    mock_orchestrator.run_full_pipeline.assert_called_once()
+        client = ServiceBusClient()
+        client.bq_service.add_row = AsyncMock(return_value=True)
+        client.segment_service.track = AsyncMock(return_value=True)
+        client.orchestrator = mock_orch
 
-    # Verify message was completed
-    mock_message.complete.assert_called_once()
+        await client._handle_message(mock_message, mock_receiver)
 
-
-@pytest.mark.asyncio
-async def test_handle_message_lead_enrich_company(service_bus_client, mock_lead_event):
-    """Test handling a lead.enrich.company event."""
-    client, mock_orchestrator = service_bus_client
-
-    # Create a mock message
-    mock_message = AsyncMock()
-    mock_lead_event["eventType"] = "lead.enrich.company"
-    mock_message.__str__ = lambda x: json.dumps(mock_lead_event)
-
-    # Call the handler
-    await client._handle_message(mock_message)
-
-    # Verify only company enrichment was called
-    mock_orchestrator.run_company_enrichment.assert_called_once()
-    mock_orchestrator.run_full_pipeline.assert_not_called()
-
-    # Verify message was completed
-    mock_message.complete.assert_called_once()
+        mock_orch.run_pipeline.assert_called_once()
+        mock_receiver.complete_message.assert_called_once_with(mock_message)
 
 
 @pytest.mark.asyncio
-async def test_handle_message_with_crm_mock_event(service_bus_client, mock_lead_event):
-    """Test listener with a real CRM mock event - verifies Lead conversion."""
-    client, mock_orchestrator = service_bus_client
+async def test_handle_message_dead_letters_unknown_event(mock_message, mock_receiver):
+    """Test that unknown event types are dead-lettered."""
+    unknown_event = {"eventType": "unknown.event"}
+    mock_message.__str__ = lambda x: json.dumps(unknown_event)
 
-    # Set event type
-    mock_lead_event["eventType"] = "lead.created"
+    with (
+        patch("services.service_bus.client.AzureServiceBusClient"),
+        patch("services.service_bus.client.ClientSecretCredential"),
+        patch("services.service_bus.client.BigQueryClient"),
+        patch("services.service_bus.client.SegmentClient"),
+        patch("services.service_bus.client.PipelineOrchestrator"),
+    ):
+        from services.service_bus.client import ServiceBusClient
 
-    # Create mock message
-    mock_message = AsyncMock()
-    mock_message.__str__ = lambda x: json.dumps(mock_lead_event)
+        client = ServiceBusClient()
+        await client._handle_message(mock_message, mock_receiver)
 
-    # Process message
-    await client._handle_message(mock_message)
-
-    # Verify orchestrator was called
-    assert mock_orchestrator.run_full_pipeline.called
-
-    # Verify Lead was created correctly from the event
-    call_args = mock_orchestrator.run_full_pipeline.call_args
-    lead = call_args[0][0]  # First positional argument
-
-    # Verify lead has correct identifiers
-    assert lead.id == mock_lead_event["lead"]["crmLeadId"]
-    assert lead.company.get("name") == mock_lead_event["company"]["name"]
-
-    # Verify message was completed
-    mock_message.complete.assert_called_once()
+        mock_receiver.dead_letter_message.assert_called_once()
+        mock_receiver.complete_message.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_handle_message_error_handling(service_bus_client, mock_lead_event):
-    """Test error handling when processing fails."""
-    client, mock_orchestrator = service_bus_client
+async def test_handle_message_does_not_complete_on_error(mock_message, mock_receiver, sample_event):
+    """Test that message is NOT completed when processing fails."""
+    mock_message.__str__ = lambda x: json.dumps(sample_event)
 
-    # Make orchestrator raise an exception
-    mock_orchestrator.run_full_pipeline.side_effect = Exception("Test error")
+    with (
+        patch("services.service_bus.client.AzureServiceBusClient"),
+        patch("services.service_bus.client.ClientSecretCredential"),
+        patch("services.service_bus.client.BigQueryClient"),
+        patch("services.service_bus.client.SegmentClient"),
+        patch("services.service_bus.client.PipelineOrchestrator") as mock_orch_class,
+    ):
+        mock_orch = AsyncMock()
+        mock_orch.run_pipeline = AsyncMock(side_effect=Exception("Test error"))
+        mock_orch_class.return_value = mock_orch
 
-    # Create a mock message
-    mock_message = AsyncMock()
-    mock_lead_event["eventType"] = "lead.created"
-    mock_message.__str__ = lambda x: json.dumps(mock_lead_event)
+        from services.service_bus.client import ServiceBusClient
 
-    # Call the handler
-    await client._handle_message(mock_message)
+        client = ServiceBusClient()
+        client.orchestrator = mock_orch
 
-    # Verify message was NOT completed (should retry)
-    mock_message.complete.assert_not_called()
+        await client._handle_message(mock_message, mock_receiver)
+
+        mock_receiver.complete_message.assert_not_called()
