@@ -13,34 +13,43 @@ from services.service_bus.client import ServiceBusClient
 # Disable OpenAI agents SDK tracing (as we are using azure openai)
 set_tracing_disabled(disabled=True)
 
-logger = get_logger("main")
+logger = get_logger(__name__)
 
 
 # Lifespan Manager (Background Listener)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Starts the Service Bus listener in the background."""
-    logger.info("Application starting up... initializing Service Bus Listener.")
+    listener_task = None
 
-    # Initialize Client
-    service_bus = ServiceBusClient()
+    if config.SERVICE_BUS_ENABLED:
+        logger.info("Application starting up... initializing Service Bus Listener.")
 
-    # Start the listener loop as a non-blocking background task
-    listener_task = asyncio.create_task(service_bus.listen())
-    logger.info("Service Bus listener started.")
+        # Initialize Client
+        service_bus = ServiceBusClient()
         app.state.service_bus = service_bus
+
+        # Start the listener loop as a non-blocking background task
+        listener_task = asyncio.create_task(service_bus.listen())
+        logger.info("Service Bus listener started.")
+    else:
+        logger.info("Service Bus listener disabled via SERVICE_BUS_ENABLED=false")
+        app.state.service_bus = None
 
     yield  # Application runs here
 
     # Cleanup on Shutdown
     logger.info("Application shutting down...")
-    await service_bus.flush_all()
 
-    listener_task.cancel()
-    try:
-        await listener_task
-    except asyncio.CancelledError:
-        logger.info("Listener stopped gracefully.")
+    if app.state.service_bus is not None:
+        await app.state.service_bus.flush_all()
+
+    if listener_task is not None:
+        listener_task.cancel()
+        try:
+            await listener_task
+        except asyncio.CancelledError:
+            logger.info("Listener stopped gracefully.")
 
 
 # Initialize app with lifespan
