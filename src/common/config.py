@@ -32,8 +32,8 @@ class Config(BaseSettings):
     SERVICE_BUS_TOPIC_NAME: str = ""
     SERVICE_BUS_SUBSCRIPTION_NAME: str = ""
 
-    # GCP & BigQuery 
-    GCPPROJECTID: str = "" # Used for Secret Manager project path
+    # GCP & BigQuery
+    GCPPROJECTID: str = ""  # Used for Secret Manager project path
     BQPROJECTID: str = ""
     BQDATASETID: str = ""
     BQTABLEID: str = ""

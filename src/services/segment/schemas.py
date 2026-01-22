@@ -1,10 +1,13 @@
 import re
 from datetime import datetime
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 class SegmentTrackEvent(BaseModel):
     """Schema for a Segment track event."""
+
     user_id: str | None = Field(None, alias="userId")
     event: str
     properties: dict[str, Any]
@@ -22,7 +25,6 @@ class SegmentTrackEvent(BaseModel):
             event=event_name,
             properties=event_body,
             timestamp=(
-                message.enqueued_time_utc.isoformat() 
-                if message.enqueued_time_utc else datetime.now().isoformat()
-            )
+                message.enqueued_time_utc.isoformat() if message.enqueued_time_utc else datetime.now().isoformat()
+            ),
         )

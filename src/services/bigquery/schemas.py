@@ -1,9 +1,12 @@
 import json
 from datetime import datetime
+
 from pydantic import BaseModel, Field
+
 
 class BigQueryRow(BaseModel):
     """Schema for a single row in the BigQuery lead events table."""
+
     eventid: str
     eventtype: str
     eventtimestamp: str
@@ -23,8 +26,7 @@ class BigQueryRow(BaseModel):
             eventid=message.message_id,
             eventtype=message.subject or "Unknown",
             eventtimestamp=(
-                message.enqueued_time_utc.isoformat() 
-                if message.enqueued_time_utc else datetime.now().isoformat()
+                message.enqueued_time_utc.isoformat() if message.enqueued_time_utc else datetime.now().isoformat()
             ),
             leadid=event_body.get("crmLeadId"),
             email=event_body.get("leadEmail"),
@@ -33,5 +35,5 @@ class BigQueryRow(BaseModel):
             leadsource=event_body.get("leadSource"),
             topic=event_body.get("leadTopic"),
             reference_number=event_body.get("leadReferenceNumber"),
-            payload=json.dumps(event_body)
+            payload=json.dumps(event_body),
         )
