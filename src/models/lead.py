@@ -15,6 +15,7 @@ class LeadType(str, Enum):
     CUSTOMS_CLEARANCE = "customs_clearance"
     FREIGHT_SHIPPING = "freight_shipping"
     CONTRACT_LOGISTICS = "contract_logistics"
+    OTHER = "other"
 
 
 FORM_TYPE_MAPPING: dict = {
@@ -22,6 +23,7 @@ FORM_TYPE_MAPPING: dict = {
     "Customs Clearance Quote Form": LeadType.CUSTOMS_CLEARANCE,
     "Freight Quote Form": LeadType.FREIGHT_SHIPPING,
     "Contract Logistics Quote Form": LeadType.CONTRACT_LOGISTICS,
+    "Other": LeadType.OTHER,
 }
 
 
@@ -56,6 +58,16 @@ class LeadQuote(BaseModel):
             "ContractLogisticsService": "service_type",
             "TypeOfRequest": "request_type",
             "PartnershipNeeds": "partnership_needs",
+        },
+        # Generic fallback for unknown/other form types
+        "_default": {
+            "DescribeYourCargo": "description",
+            "TypeOfCargo": "cargo_type",
+            "TypeOfCargoRoad": "cargo_type",
+            "TypeOfRequest": "request_type",
+            "PartnershipNeeds": "partnership_needs",
+            "UnitType": "unit_type",
+            "Route": "route",
         },
     }
 
@@ -94,7 +106,7 @@ class LeadQuote(BaseModel):
             **extras: Additional fields to set (e.g., number, notes from CRM)
         """
         form_title = payload.get("formTitle")
-        mappings = cls._FIELD_MAPPINGS.get(form_title, {})
+        mappings = cls._FIELD_MAPPINGS.get(form_title) or cls._FIELD_MAPPINGS.get("_default", {})
 
         data = {
             "form_title": form_title,
@@ -210,7 +222,7 @@ class Lead(BaseModel):
 
         # Quote details
         form_title = payload.get("formTitle")
-        lead_type = FORM_TYPE_MAPPING.get(form_title) if form_title else None
+        lead_type = FORM_TYPE_MAPPING.get(form_title, LeadType.OTHER) if form_title else LeadType.OTHER
         quote = LeadQuote.from_payload(payload)
 
         return cls(
@@ -285,7 +297,7 @@ class Lead(BaseModel):
 
         # Quote details
         form_title = payload.get("formTitle")
-        lead_type = FORM_TYPE_MAPPING.get(form_title)
+        lead_type = FORM_TYPE_MAPPING.get(form_title, LeadType.OTHER)
         quote = LeadQuote.from_payload(
             payload,
             number=record.get("dfds_requestnumber"),

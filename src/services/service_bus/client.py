@@ -20,7 +20,7 @@ from services.segment.schemas import SegmentTrackEvent
 
 logger = get_logger(__name__)
 
-ACCEPTED_EVENTS = {"lead.created", "lead.updated", "lead.enrich.company", "lead.enrich.cargo"}
+ACCEPTED_EVENTS = {"lead.created", "lead.enrich.company", "lead.enrich.cargo"}
 
 
 class ServiceBusClient:

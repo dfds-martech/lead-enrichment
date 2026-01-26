@@ -1,15 +1,18 @@
 """
 Cargo enrichment orchestrator.
 
-Extracts basic cargo information from lead data.
+Orchestrates the cargo enrichment process:
+1. Extraction - LLM-based cargo information extraction from lead data
+2. Features - extract categorized features from extraction results
 """
 
 from agents import Agent, Runner
 
 from common.logging import get_logger
 from common.openai_errors import handle_openai_errors
-from enrichments.cargo.agents.cargo_extraction import create_cargo_extraction_agent
-from enrichments.cargo.schemas import CargoEnrichmentResult, CargoExtractionResult
+from enrichments.cargo.agents.cargo_extraction import CargoExtractionResult, create_cargo_extraction_agent
+from enrichments.cargo.features import extract_cargo_features
+from enrichments.cargo.schemas import CargoEnrichmentResult
 from models.lead import Lead
 
 logger = get_logger(__name__)
@@ -69,20 +72,39 @@ class CargoEnricher:
         if result is None:
             error = f"extraction returned None for lead: {lead.id}"
             logger.error(f"[Cargo] {error}")
-            return CargoExtractionResult(error=error)
+            raise ValueError(error)
 
         logger.info(f"[Cargo] Extracted - commodity_type: {result.commodity_type}, unit_type: {result.unit_type}")
         return result
 
     async def enrich(self, lead: Lead) -> CargoEnrichmentResult:
-        """Run cargo enrichment."""
+        """Run cargo enrichment through all stages."""
         extraction = None
-        error = None
+        features = None
+        errors: list[str] = []
 
+        # Stage 1: Extraction (best effort)
         try:
             extraction = await self._extract(lead)
         except Exception as e:
-            logger.error(f"[Cargo] Failed: {type(e).__name__}: {e}", exc_info=True)
-            error = f"{type(e).__name__}: {e}"
+            errors.append(f"extraction: {type(e).__name__}: {e}")
+            logger.warning(f"[Cargo] Extraction failed: {e!r}")
 
-        return CargoEnrichmentResult(extraction=extraction, error=error)
+        # Stage 2: Feature Extraction (best effort, handles None inputs)
+        try:
+            features = extract_cargo_features(extraction)
+        except Exception as e:
+            errors.append(f"features: {type(e).__name__}: {e}")
+            logger.warning(f"[Cargo] Feature extraction failed: {e!r}")
+
+        # Log final status
+        if errors:
+            logger.warning(f"[Cargo] Completed with {len(errors)} error(s): {errors}")
+        else:
+            logger.info("[Cargo] Completed successfully")
+
+        return CargoEnrichmentResult(
+            extraction=extraction,
+            features=features,
+            error="; ".join(errors) if errors else None,
+        )

@@ -25,7 +25,7 @@ class Config(BaseSettings):
     SEGMENT_SPACE_ID: SecretStr = SecretStr("")
 
     # Service Bus
-    SERVICE_BUS_ENABLED: bool = False
+    SERVICE_BUS_ENABLED: bool = True
     AZURE_TENANT_ID: str = ""
     AZURE_CLIENT_ID: str = ""
     AZURE_CLIENT_SECRET: SecretStr = SecretStr("")
