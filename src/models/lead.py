@@ -205,7 +205,9 @@ class Lead(BaseModel):
     def from_event(cls, event: dict) -> "Lead":
         """Build a Lead from an incoming lead event."""
 
-        full_payload_str = event.get("lead", {}).get("fullPayload")
+        data = event.get("data", {})
+        
+        full_payload_str = data.get("lead", {}).get("fullPayLoad")
         if isinstance(full_payload_str, str):
             try:
                 payload = json.loads(full_payload_str)
@@ -214,11 +216,11 @@ class Lead(BaseModel):
         else:
             payload = full_payload_str or {}
 
-        identifiers = _extract_identifiers_from_payload(event, payload)
-        company = _extract_company(event, identifiers)
-        contact = _extract_contact(event, payload)
-        collection = _extract_loading_point("collection", event)
-        delivery = _extract_loading_point("delivery", event)
+        identifiers = _extract_identifiers_from_payload(data, payload)
+        company = _extract_company(data, identifiers)
+        contact = _extract_contact(data, payload)
+        collection = _extract_loading_address("collection", data)
+        delivery = _extract_loading_address("delivery", data)
 
         # Quote details
         form_title = payload.get("formTitle")
@@ -226,10 +228,9 @@ class Lead(BaseModel):
         quote = LeadQuote.from_payload(payload)
 
         return cls(
-            id=event.get("lead", {}).get("crmLeadId", "UNKNOWN_LEAD_ID"),
+            id=data.get("lead", {}).get("crmLeadId", "UNKNOWN_LEAD_ID"),
             type=lead_type,
-            created_on=event.get("eventDate"),
-            modified_on=event.get("eventDate"),
+            created_on=event.get("eventTimestamp"),
             identifiers=identifiers,
             contact=contact,
             company=company,
@@ -391,11 +392,11 @@ def _extract_company(event: dict, identifiers: dict) -> dict:
         "domain": domain,
         "name": company.get("name", None),
         "street": street or None,
-        "city": address.get("city", None),
+        "city": address.get("city", None) or None,
         "postal_code": address.get("postalCode", None),
         "state": address.get("state", None),
         "country": address.get("country", None),
-        "country_code": address.get("country_code", None),
+        "country_code": address.get("countryCode", None),
         "crm_account_id": company.get("crmAccountId", None),
         "crm_account_type": company.get("type", None),
         "crm_account_segment": company.get("segment", None),
@@ -403,12 +404,18 @@ def _extract_company(event: dict, identifiers: dict) -> dict:
     }
 
 
-def _extract_loading_point(point: Literal["collection", "delivery"], event: dict) -> dict:
-    """Extract collection point details from the event."""
+def _extract_loading_address(target: Literal["collection", "delivery"], event: dict) -> dict:
+    """Extract collection/delivery target details from the event."""
     lead = event.get("lead", {})
+    address = lead.get(f"{target}Address", {})
+    street_parts = [address.get("line1"), address.get("line2")]
+    street = ", ".join(part for part in street_parts if part)
 
     return {
-        "city": lead.get(f"{point}City", None),
-        "country": lead.get(f"{point}Country", None),
-        "country_code": lead.get(f"{point}CountryCode", None),
+        "street": street or None,
+        "city": address.get("city", None),
+        "postal_code": address.get("postalCode", None),
+        "country": address.get("country", None),
+        "country_code": address.get("countryCode", None),
+        "state": address.get("state", None),
     }
