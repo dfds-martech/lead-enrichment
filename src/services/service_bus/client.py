@@ -1,6 +1,8 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
+from enum import Enum
+from typing import Any
 
 from azure.identity.aio import ClientSecretCredential
 from azure.servicebus import ServiceBusMessage
@@ -10,7 +12,7 @@ from azure.servicebus.aio import ServiceBusReceiver
 from common.config import config
 from common.logging import get_logger
 from models.lead import Lead
-from pipeline.orchestrator import PipelineOrchestrator
+from pipeline.orchestrator import PipelineOrchestrator, PipelineResult
 
 # Service Imports
 from services.bigquery.client import BigQueryClient
@@ -20,7 +22,42 @@ from services.segment.schemas import SegmentTrackEvent
 
 logger = get_logger(__name__)
 
-ACCEPTED_EVENTS = {"lead.created", "lead.enrich.company", "lead.enrich.cargo"}
+
+class IncommingEventType(str, Enum):
+    LEAD_CREATED = "lead.created"
+    COMPANY_ENRICHMENT = "lead.enrich.company"
+    CARGO_ENRICHMENT = "lead.enrich.cargo"
+
+    @classmethod
+    def from_string(cls, value: str) -> "IncommingEventType | None":
+        """Parse string to enum, returns None if not accepted."""
+        for member in cls:
+            if member.value == value:
+                return member
+        return None
+
+    def is_full_pipeline(self) -> bool:
+        """Check if this event triggers the full enrichment pipeline."""
+        return self == IncommingEventType.LEAD_CREATED
+
+
+class OutputEventType(str, Enum):
+    """Event type constants for enrichment completion events."""
+
+    LEAD_ENRICHMENT = "lead.enriched.lead"
+    COMPANY_ENRICHMENT = "lead.enriched.company"
+    CARGO_ENRICHMENT = "lead.enriched.cargo"
+    PIPELINE_COMPLETED = "lead.enrichment.completed"
+
+    @classmethod
+    def for_enrichment_type(cls, enrichment_type: str) -> "OutputEventType":
+        """Get output event type for a given enrichment type."""
+        mapping = {
+            "lead": cls.LEAD_ENRICHMENT,
+            "company": cls.COMPANY_ENRICHMENT,
+            "cargo": cls.CARGO_ENRICHMENT,
+        }
+        return mapping[enrichment_type]
 
 
 class ServiceBusClient:
@@ -28,6 +65,7 @@ class ServiceBusClient:
 
     def __init__(self):
         # --- 1. Clients Initialization ---
+
         # Azure Service Bus
         self.topic_name = config.SERVICE_BUS_TOPIC_NAME
         self.subscription_name = config.SERVICE_BUS_SUBSCRIPTION_NAME
@@ -47,13 +85,16 @@ class ServiceBusClient:
         # Initialize Dedicated Services
         self.bq_service = BigQueryClient()
         self.segment_service = SegmentClient()
-        # Pipeline Orchestrator
-        self.orchestrator = PipelineOrchestrator(service_bus=self)
+        # Pipeline Orchestrator (pure orchestration, no publishing)
+        self.orchestrator = PipelineOrchestrator()
 
         # Config
         self.bq_flush_interval = 10  # Seconds
 
-    async def setup(self):
+        # Background task tracking
+        self._flusher_task: asyncio.Task | None = None
+
+    async def setup(self) -> None:
         """Async setup to load secrets."""
         await self.segment_service.setup()
 
@@ -79,10 +120,68 @@ class ServiceBusClient:
                     messages.append({"raw": str(msg)})
 
         return messages
+    
+    async def send_message(self, event: dict) -> None:
+        """Send a message to the topic (Async version for testing)."""
+        sender = self.client.get_topic_sender(topic_name=self.topic_name)
+        async with sender:
+            msg = ServiceBusMessage(json.dumps(event))
+            await sender.send_messages(msg)
+            logger.info("Test event sent!")
+
+    # --- Event Payload Builders ---
+
+    def _build_enrichment_event_payload(
+        self,
+        lead_id: str,
+        enrichment_type: str,  # "lead", "company", "cargo"
+        result: dict,  # Already model_dump()'ed
+    ) -> dict:
+        """Build event payload for enrichment completion events."""
+        return {
+            "leadId": lead_id,
+            "enrichmentType": enrichment_type,
+            "result": result,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+    async def _publish_enrichment_events(
+        self,
+        lead: Lead,
+        result: PipelineResult,
+    ) -> None:
+        """Publish enrichment events for each enrichment type."""
+        enrichment_results = {
+            "lead": result.lead,
+            "company": result.company, 
+            "cargo": result.cargo,
+        }
+
+        for enrichment_type, result in enrichment_results.items():
+            if result is not None:
+                output_event = OutputEventType.for_enrichment_type(enrichment_type)
+                payload = self._build_enrichment_event_payload(
+                    lead_id=lead.id,
+                    enrichment_type=enrichment_type,
+                    result=result.model_dump(),
+                )
+                await self.publish(
+                    event_type=output_event.value,
+                    event_data=payload,
+                    correlation_id=lead.id,
+                )
+
+        # Publish pipeline completion if all enrichments ran
+        if all(r is not None for r in enrichment_results.values()):
+            await self.publish(
+                event_type=OutputEventType.PIPELINE_COMPLETED.value,
+                event_data={"leadId": lead.id, "status": "success"},
+                correlation_id=lead.id,
+            )
 
     # --- Background Tasks ---
 
-    async def _periodic_flusher(self):
+    async def _periodic_flusher(self) -> None:
         """Background task to trigger BigQuery flush periodically."""
         logger.info("Starting periodic flusher.")
         while True:
@@ -91,46 +190,42 @@ class ServiceBusClient:
 
     # --- Main Handling Logic ---
 
-    async def _handle_message(self, message: ServiceBusMessage, receiver: ServiceBusReceiver):
+    async def _handle_message(self, message: ServiceBusMessage, receiver: ServiceBusReceiver) -> None:
         """Process a single message: Enrich -> Dispatch -> ACK."""
         try:
             body_str = str(message)
             event_body = json.loads(body_str)
-            event_type = event_body.get("eventType")
+            event_type_str = event_body.get("eventType")
+            logger.info(f"Event received: {event_type_str} | Processing...")
 
-            logger.info(f"Event received: {event_type} | Processing...")
-
-            if event_type not in ACCEPTED_EVENTS:
-                logger.warning(f"Event type '{event_type}' not accepted. Dead-lettering.")
+            event_type = IncommingEventType.from_string(event_type_str)
+            if event_type is None:
+                logger.warning(f"Event type '{event_type_str}' not accepted. Dead-lettering.")
                 await receiver.dead_letter_message(
                     message,
                     reason="UnknownEventType",
-                    error_description=f"Event type '{event_type}' not in accepted list",
+                    error_description=f"Event type '{event_type_str}' not in accepted list",
                 )
                 return
 
-            enrichment_result = {}
+            result = PipelineResult()
 
-            # --- STEP 1: ENRICHMENT ---
+            # --- STEP 1: ENRICHMENT (pure orchestration) ---
             try:
                 lead = Lead.from_event(event_body)
+                
+                if event_type == IncommingEventType.COMPANY_ENRICHMENT:
+                    result.company = await self.orchestrator.run_company_enrichment(lead)
 
-                if event_type == "lead.enrich.company":
-                    enrichment_result = await self.orchestrator.run_company_enrichment(lead)
-                    if hasattr(enrichment_result, "model_dump"):
-                        enrichment_result = enrichment_result.model_dump()
+                elif event_type == IncommingEventType.CARGO_ENRICHMENT:
+                    result.cargo = await self.orchestrator.run_cargo_enrichment(lead)
 
-                elif event_type == "lead.enrich.cargo":
-                    enrichment_result = await self.orchestrator.run_cargo_enrichment(lead)
-                    if hasattr(enrichment_result, "model_dump"):
-                        enrichment_result = enrichment_result.model_dump()
-
-                else:
-                    pipeline_results = await self.orchestrator.run_pipeline(lead)
-                    enrichment_result = pipeline_results
-
+                elif event_type.is_full_pipeline():
+                    result = await self.orchestrator.run_pipeline(lead)
+                    
+                await self._publish_enrichment_events(lead, result)
+                event_body["enrichment"] = result.model_dump()
                 logger.info(f"Enrichment successful for lead {lead.id}")
-                event_body["enrichment"] = enrichment_result
 
             except Exception as enrich_err:
                 logger.error(f"Enrichment failed (continuing to archive raw event): {enrich_err}")
@@ -142,15 +237,15 @@ class ServiceBusClient:
             segment_event = SegmentTrackEvent.from_message(message, event_body)
 
             # Send to BQ and Segment in parallel
-            results = await asyncio.gather(
+            dispatch_results = await asyncio.gather(
                 self.bq_service.add_row(bq_row), self.segment_service.track(segment_event), return_exceptions=True
             )
 
             # Check results (Strict Reliability: Fail if any service returns False/Exception)
-            has_failures = False
-            for res in results:
-                if isinstance(res, Exception) or res is False:
-                    has_failures = True
+            has_failures = any(
+                isinstance(res, Exception) or res is False
+                for res in dispatch_results
+            )
 
             if has_failures:
                 # This raises an exception, which jumps to the `except` block below.
@@ -164,12 +259,12 @@ class ServiceBusClient:
             logger.error(f"Processing failed for message {message.message_id}: {e}")
             # Message NOT completed -> Retry
 
-    async def listen(self):
+    async def listen(self) -> None:
         """Start the listener loop."""
         await self.setup()
 
         # Start the periodic flusher for BigQuery
-        asyncio.create_task(self._periodic_flusher())
+        self._flusher_task = asyncio.create_task(self._periodic_flusher())
 
         async with self.client:
             receiver = self.client.get_subscription_receiver(
@@ -180,25 +275,36 @@ class ServiceBusClient:
                 async for msg in receiver:
                     await self._handle_message(msg, receiver)
 
-    # Used for clean shutdown in main.py
-    async def flush_all(self):
+    async def flush_all(self) -> None:
+        """Flush pending data and stop background tasks. Used for clean shutdown."""
+        # Cancel periodic flusher if running
+        if self._flusher_task is not None:
+            self._flusher_task.cancel()
+            try:
+                await self._flusher_task
+            except asyncio.CancelledError:
+                pass
+
+        # Final flush of any remaining data
         await self.bq_service.flush()
 
-    async def publish(self, event_type: str, event_data: dict, correlation_id: str | None = None):
-        """Publish an event to Service Bus."""
+    async def publish(self, event_type: str, event_data: dict, correlation_id: str | None = None) -> None:
+        """Publish an event to Service Bus.
+
+        Note: Assumes client is already open (called from within listen context).
+        """
         event = {
-            "eventId": f"{event_type}-{datetime.now().isoformat()}",
+            "eventId": f"{event_type}-{datetime.now(UTC).isoformat()}",
             "eventType": event_type,
             "eventVersion": "1.0",
-            "eventTimestamp": datetime.now().isoformat(),
+            "eventTimestamp": datetime.now(UTC).isoformat(),
             "sourceSystem": "lead-enrichment",
             "correlationId": correlation_id or event_data.get("leadId"),
             "data": event_data,
         }
 
-        async with self.client:
-            sender = self.client.get_topic_sender(topic_name=self.topic_name)
-            async with sender:
-                msg = ServiceBusMessage(json.dumps(event), correlation_id=correlation_id)
-                await sender.send_messages(msg)
-                logger.info(f"Published event: {event_type}")
+        sender = self.client.get_topic_sender(topic_name=self.topic_name)
+        async with sender:
+            msg = ServiceBusMessage(json.dumps(event), correlation_id=correlation_id)
+            await sender.send_messages(msg)
+            logger.info(f"Published event: {event_type}")
