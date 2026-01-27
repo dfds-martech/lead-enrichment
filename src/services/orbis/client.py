@@ -223,14 +223,14 @@ class OrbisClient:
             - financials by codes
             - monetary_unit: 0 (actual), 3 (thousands), 6 (millions), 9 (billions), 12 (trillions)',
         """
-        latest_year = datetime.now().year - 1
+        # latest_year = datetime.now().year - 1
         monetary_unit = 0
 
         financial_codes = ["OPRE", "PLBT", "PL", "CF", "TOAS", "SHFD"]
         financial_fields = [
             {
                 code: {
-                    "IndexOrYear": latest_year,
+                    # "IndexOrYear": latest_year, (optional - gets latest by default)
                     "Currency": "EUR",
                     "Unit": monetary_unit,
                     "As": f"{code}_EUR",
