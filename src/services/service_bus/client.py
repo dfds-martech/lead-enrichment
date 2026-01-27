@@ -106,7 +106,7 @@ class ServiceBusClient:
 
     # --- Testing Helpers ---
 
-    async def get_messages(self, max_count: int = 5) -> list[dict]:
+    async def get_messages(self, max_count: int) -> list[dict]:
         """Get some messages from the queue without removing (Async version for testing)."""
         messages = []
 
@@ -146,54 +146,56 @@ class ServiceBusClient:
             logger.error(f"Failed to send message: {type(e).__name__}: {e}")
             raise
 
-    # --- Event Payload Builders ---
+    async def flush_queue(self, max_count: int = 100) -> int:
+        """Delete all messages from the queue (for testing/cleanup)."""
+        completed_count = 0
 
-    def _build_enrichment_event_payload(
-        self,
-        lead_id: str,
-        enrichment_type: str,  # "lead", "company", "cargo"
-        result: dict,  # Already model_dump()'ed
-    ) -> dict:
-        """Build event payload for enrichment completion events."""
-        return {
-            "leadId": lead_id,
-            "enrichmentType": enrichment_type,
-            "result": result,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        async with self.client:
+            receiver = self.client.get_subscription_receiver(
+                topic_name=self.topic_name, subscription_name=self.subscription_name
+            )
+
+            async with receiver:
+                while True:
+                    messages = await receiver.receive_messages(max_message_count=max_count, max_wait_time=5)
+                    if not messages:
+                        break
+                    
+                    for msg in messages:
+                        await receiver.complete_message(msg)
+                        completed_count += 1
+                    
+                    logger.info(f"Completed batch of {len(messages)} messages...")
+
+        logger.info(f"Flushed {completed_count} messages from the queue.")
+        return completed_count
+
+    # --- Event Payload Builders ---
 
     async def _publish_enrichment_events(
         self,
+        event_id: str,
         lead: Lead,
         result: PipelineResult,
     ) -> None:
         """Publish enrichment events for each enrichment type."""
-        pipeline_results = {
-            "lead": result.lead,
-            "company": result.company,
-            "cargo": result.cargo,
-        }
+        result_dict = result.model_dump()
 
-        for enrichment_type, result in pipeline_results.items():
-            if result is not None:
+        for enrichment_type, enrichment_result in result_dict.items():
+            if enrichment_result is not None:
                 output_event = OutgoingEventType.for_enrichment_type(enrichment_type)
-                payload = self._build_enrichment_event_payload(
-                    lead_id=lead.id,
-                    enrichment_type=enrichment_type,
-                    result=result.model_dump(),
-                )
                 await self.publish(
                     event_type=output_event.value,
-                    event_data=payload,
-                    correlation_id=lead.id,
+                    event_data=enrichment_result,
+                    correlation_id=event_id,
                 )
 
         # Publish pipeline completion if all enrichments ran
-        if all(r is not None for r in pipeline_results.values()):
+        if all(r is not None for r in result_dict.values()):
             await self.publish(
                 event_type=OutgoingEventType.PIPELINE_COMPLETED.value,
                 event_data={"leadId": lead.id, "status": "success"},
-                correlation_id=lead.id,
+                correlation_id=event_id,
             )
 
     # --- Background Tasks ---
@@ -212,8 +214,9 @@ class ServiceBusClient:
         try:
             body_str = str(message)
             event_body = json.loads(body_str)
+            event_id = event_body.get("eventId", "unknown")
             event_type_str = event_body.get("eventType")
-            logger.info(f"Event received: {event_type_str} | Processing...")
+            logger.info(f"Event received: {event_type_str} | id={event_id} | Processing...")
 
             event_type = IncomingEventType.from_string(event_type_str)
             if event_type is None:
@@ -243,7 +246,7 @@ class ServiceBusClient:
                 elif event_type.is_full_pipeline():
                     result = await self.orchestrator.run_pipeline(lead)
 
-                await self._publish_enrichment_events(lead, result)
+                await self._publish_enrichment_events(event_id, lead, result)
                 event_body["enrichment"] = result.model_dump()
                 logger.info(f"Enrichment successful for lead {lead.id}")
 
@@ -251,23 +254,23 @@ class ServiceBusClient:
                 logger.error(f"Enrichment failed (continuing to archive raw event): {enrich_err}")
                 event_body["enrichment_error"] = str(enrich_err)
 
-            # --- STEP 2: DISPATCH (Side Effects) ---
-            # Prepare data objects using Schemas
-            bq_row = BigQueryRow.from_message(message, event_body)
-            segment_event = SegmentTrackEvent.from_message(message, event_body)
+            # # --- STEP 2: DISPATCH (Side Effects) ---
+            # # Prepare data objects using Schemas
+            # bq_row = BigQueryRow.from_message(message, event_body)
+            # segment_event = SegmentTrackEvent.from_message(message, event_body)
 
-            # Send to BQ and Segment in parallel
-            dispatch_results = await asyncio.gather(
-                self.bq_service.add_row(bq_row), self.segment_service.track(segment_event), return_exceptions=True
-            )
+            # # Send to BQ and Segment in parallel
+            # dispatch_results = await asyncio.gather(
+            #     self.bq_service.add_row(bq_row), self.segment_service.track(segment_event), return_exceptions=True
+            # )
 
-            # Check results (Strict Reliability: Fail if any service returns False/Exception)
-            has_failures = any(isinstance(res, Exception) or res is False for res in dispatch_results)
+            # # Check results (Strict Reliability: Fail if any service returns False/Exception)
+            # has_failures = any(isinstance(res, Exception) or res is False for res in dispatch_results)
 
-            if has_failures:
-                # This raises an exception, which jumps to the `except` block below.
-                # The message is NOT ACKed, so Azure will redeliver it.
-                raise Exception("Downstream dispatch failed. NACKing message.")
+            # if has_failures:
+            #     # This raises an exception, which jumps to the `except` block below.
+            #     # The message is NOT ACKed, so Azure will redeliver it.
+            #     raise Exception("Downstream dispatch failed. NACKing message.")
 
             # --- STEP 3: COMPLETE (ACK) ---
             await receiver.complete_message(message)
@@ -306,10 +309,7 @@ class ServiceBusClient:
         await self.bq_service.flush()
 
     async def publish(self, event_type: str, event_data: dict, correlation_id: str | None = None) -> None:
-        """Publish an event to Service Bus.
-
-        Note: Assumes client is already open (called from within listen context).
-        """
+        """Publish an event to Service Bus."""
         event = {
             "eventId": f"{event_type}-{datetime.now(UTC).isoformat()}",
             "eventType": event_type,
