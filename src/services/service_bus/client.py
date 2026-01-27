@@ -2,10 +2,9 @@ import asyncio
 import json
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
 
 from azure.identity.aio import ClientSecretCredential
-from azure.servicebus import ServiceBusMessage
+from azure.servicebus import ServiceBusMessage, TransportType
 from azure.servicebus.aio import ServiceBusClient as AzureServiceBusClient
 from azure.servicebus.aio import ServiceBusReceiver
 
@@ -23,34 +22,35 @@ from services.segment.schemas import SegmentTrackEvent
 logger = get_logger(__name__)
 
 
-class IncommingEventType(str, Enum):
+class IncomingEventType(str, Enum):
+    """Incoming event types that trigger enrichment."""
+
     LEAD_CREATED = "lead.created"
+    LEAD_ENRICHMENT = "lead.enrich.lead"
     COMPANY_ENRICHMENT = "lead.enrich.company"
     CARGO_ENRICHMENT = "lead.enrich.cargo"
 
     @classmethod
-    def from_string(cls, value: str) -> "IncommingEventType | None":
-        """Parse string to enum, returns None if not accepted."""
-        for member in cls:
-            if member.value == value:
-                return member
-        return None
+    def from_string(cls, value: str) -> "IncomingEventType | None":
+        try:
+            return cls(value)
+        except ValueError:
+            return None
 
     def is_full_pipeline(self) -> bool:
-        """Check if this event triggers the full enrichment pipeline."""
-        return self == IncommingEventType.LEAD_CREATED
+        return self == IncomingEventType.LEAD_CREATED
 
 
-class OutputEventType(str, Enum):
-    """Event type constants for enrichment completion events."""
+class OutgoingEventType(str, Enum):
+    """Outgoing event types published after enrichment."""
 
     LEAD_ENRICHMENT = "lead.enriched.lead"
     COMPANY_ENRICHMENT = "lead.enriched.company"
     CARGO_ENRICHMENT = "lead.enriched.cargo"
-    PIPELINE_COMPLETED = "lead.enrichment.completed"
+    PIPELINE_COMPLETED = "lead.enriched.completed"
 
     @classmethod
-    def for_enrichment_type(cls, enrichment_type: str) -> "OutputEventType":
+    def for_enrichment_type(cls, enrichment_type: str) -> "OutgoingEventType":
         """Get output event type for a given enrichment type."""
         mapping = {
             "lead": cls.LEAD_ENRICHMENT,
@@ -64,28 +64,14 @@ class ServiceBusClient:
     """Service Bus listener for processing lead events with BQ and Segment integration."""
 
     def __init__(self):
-        # --- 1. Clients Initialization ---
-
         # Azure Service Bus
         self.topic_name = config.SERVICE_BUS_TOPIC_NAME
         self.subscription_name = config.SERVICE_BUS_SUBSCRIPTION_NAME
-
-        # Create Azure AD credential
-        credential = ClientSecretCredential(
-            tenant_id=config.AZURE_TENANT_ID,
-            client_id=config.AZURE_CLIENT_ID,
-            client_secret=config.AZURE_CLIENT_SECRET.get_secret_value(),
-        )
-
-        # Create Service Bus client
-        self.client = AzureServiceBusClient(
-            fully_qualified_namespace=config.SERVICE_BUS_NAMESPACE, credential=credential
-        )
+        self.client = self._create_service_bus_client()
 
         # Initialize Dedicated Services
         self.bq_service = BigQueryClient()
         self.segment_service = SegmentClient()
-        # Pipeline Orchestrator (pure orchestration, no publishing)
         self.orchestrator = PipelineOrchestrator()
 
         # Config
@@ -94,40 +80,71 @@ class ServiceBusClient:
         # Background task tracking
         self._flusher_task: asyncio.Task | None = None
 
+    def _create_service_bus_client(self) -> AzureServiceBusClient:
+        credential = ClientSecretCredential(
+            tenant_id=config.AZURE_TENANT_ID,
+            client_id=config.AZURE_CLIENT_ID,
+            client_secret=config.AZURE_CLIENT_SECRET.get_secret_value(),
+        )
+
+        client_kwargs = {
+            "fully_qualified_namespace": config.SERVICE_BUS_NAMESPACE,
+            "credential": credential,
+        }
+
+        if config.SERVICE_BUS_USE_WEBSOCKET:
+            client_kwargs["transport_type"] = TransportType.AmqpOverWebsocket
+            logger.info("Using WebSocket transport (VPN-compatible, port 443)")
+        else:
+            logger.info("Using AMQP transport (standard, port 5671)")
+
+        return AzureServiceBusClient(**client_kwargs)
+
     async def setup(self) -> None:
         """Async setup to load secrets."""
         await self.segment_service.setup()
 
-    # --- Testing Helper ---
+    # --- Testing Helpers ---
 
     async def get_messages(self, max_count: int = 5) -> list[dict]:
         """Get some messages from the queue without removing (Async version for testing)."""
         messages = []
 
-        # Create a receiver just for peeking
-        receiver = self.client.get_subscription_receiver(
-            topic_name=self.topic_name, subscription_name=self.subscription_name
-        )
+        async with self.client:
+            receiver = self.client.get_subscription_receiver(
+                topic_name=self.topic_name, subscription_name=self.subscription_name
+            )
 
-        async with receiver:
-            # peek_messages is awaitable in the async client
-            peeked = await receiver.peek_messages(max_message_count=max_count)
-            for msg in peeked:
-                try:
-                    body = json.loads(str(msg))
-                    messages.append(body)
-                except json.JSONDecodeError:
-                    messages.append({"raw": str(msg)})
+            async with receiver:
+                # peek_messages is awaitable in the async client
+                peeked = await receiver.peek_messages(max_message_count=max_count)
+                for msg in peeked:
+                    try:
+                        body = json.loads(str(msg))
+                        messages.append(body)
+                    except json.JSONDecodeError:
+                        messages.append({"raw": str(msg)})
 
+        logger.info(f"Peeked {len(messages)} messages from the queue.")
         return messages
-    
+
     async def send_message(self, event: dict) -> None:
-        """Send a message to the topic (Async version for testing)."""
-        sender = self.client.get_topic_sender(topic_name=self.topic_name)
-        async with sender:
-            msg = ServiceBusMessage(json.dumps(event))
-            await sender.send_messages(msg)
-            logger.info("Test event sent!")
+        """Send a message to the topic (for testing)."""
+        try:
+            logger.info(f"Starting send_message for event type: {event.get('eventType')}")
+            async with asyncio.timeout(30):
+                async with self.client:
+                    sender = self.client.get_topic_sender(topic_name=self.topic_name)
+                    async with sender:
+                        msg = ServiceBusMessage(json.dumps(event))
+                        await sender.send_messages(msg)
+
+        except TimeoutError:
+            logger.error("Send message timed out after 30 seconds")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to send message: {type(e).__name__}: {e}")
+            raise
 
     # --- Event Payload Builders ---
 
@@ -151,15 +168,15 @@ class ServiceBusClient:
         result: PipelineResult,
     ) -> None:
         """Publish enrichment events for each enrichment type."""
-        enrichment_results = {
+        pipeline_results = {
             "lead": result.lead,
-            "company": result.company, 
+            "company": result.company,
             "cargo": result.cargo,
         }
 
-        for enrichment_type, result in enrichment_results.items():
+        for enrichment_type, result in pipeline_results.items():
             if result is not None:
-                output_event = OutputEventType.for_enrichment_type(enrichment_type)
+                output_event = OutgoingEventType.for_enrichment_type(enrichment_type)
                 payload = self._build_enrichment_event_payload(
                     lead_id=lead.id,
                     enrichment_type=enrichment_type,
@@ -172,9 +189,9 @@ class ServiceBusClient:
                 )
 
         # Publish pipeline completion if all enrichments ran
-        if all(r is not None for r in enrichment_results.values()):
+        if all(r is not None for r in pipeline_results.values()):
             await self.publish(
-                event_type=OutputEventType.PIPELINE_COMPLETED.value,
+                event_type=OutgoingEventType.PIPELINE_COMPLETED.value,
                 event_data={"leadId": lead.id, "status": "success"},
                 correlation_id=lead.id,
             )
@@ -198,7 +215,7 @@ class ServiceBusClient:
             event_type_str = event_body.get("eventType")
             logger.info(f"Event received: {event_type_str} | Processing...")
 
-            event_type = IncommingEventType.from_string(event_type_str)
+            event_type = IncomingEventType.from_string(event_type_str)
             if event_type is None:
                 logger.warning(f"Event type '{event_type_str}' not accepted. Dead-lettering.")
                 await receiver.dead_letter_message(
@@ -210,19 +227,22 @@ class ServiceBusClient:
 
             result = PipelineResult()
 
-            # --- STEP 1: ENRICHMENT (pure orchestration) ---
+            # --- STEP 1: ENRICHMENT ---
             try:
                 lead = Lead.from_event(event_body)
-                
-                if event_type == IncommingEventType.COMPANY_ENRICHMENT:
+
+                if event_type == IncomingEventType.LEAD_ENRICHMENT:
+                    result.lead = await self.orchestrator.run_lead_enrichment(lead)
+
+                elif event_type == IncomingEventType.COMPANY_ENRICHMENT:
                     result.company = await self.orchestrator.run_company_enrichment(lead)
 
-                elif event_type == IncommingEventType.CARGO_ENRICHMENT:
+                elif event_type == IncomingEventType.CARGO_ENRICHMENT:
                     result.cargo = await self.orchestrator.run_cargo_enrichment(lead)
 
                 elif event_type.is_full_pipeline():
                     result = await self.orchestrator.run_pipeline(lead)
-                    
+
                 await self._publish_enrichment_events(lead, result)
                 event_body["enrichment"] = result.model_dump()
                 logger.info(f"Enrichment successful for lead {lead.id}")
@@ -242,10 +262,7 @@ class ServiceBusClient:
             )
 
             # Check results (Strict Reliability: Fail if any service returns False/Exception)
-            has_failures = any(
-                isinstance(res, Exception) or res is False
-                for res in dispatch_results
-            )
+            has_failures = any(isinstance(res, Exception) or res is False for res in dispatch_results)
 
             if has_failures:
                 # This raises an exception, which jumps to the `except` block below.
