@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import httpx
-from google.cloud import secretmanager
 
 from common.config import config
 from common.logging import get_logger
@@ -15,32 +14,13 @@ class SegmentClient:
     def __init__(self):
         self.write_key: str | None = None
         self.api_url = "https://events.eu1.segmentapis.com/v1/track"
-        
-        # Secret Manager Client
-        self.secret_client = secretmanager.SecretManagerServiceClient()
-        self.gcp_project_id = config.GCPPROJECTID
-
-    async def _get_secret(self, secret_id: str) -> str | None:
-        """Helper to fetch secrets from Google Secret Manager."""
-        if not secret_id:
-            return None
-        
-        def fetch():
-            name = f"projects/{self.gcp_project_id}/secrets/{secret_id}/versions/latest"
-            response = self.secret_client.access_secret_version(request={"name": name})
-            return response.payload.data.decode("UTF-8")
-        
-        try:
-            return await asyncio.to_thread(fetch)
-        except Exception as e:
-            logger.error(f"Failed to fetch secret {secret_id}: {e}")
-            return None
+    
 
     async def setup(self):
         """Load the Segment Write Key from Secret Manager."""
         if config.SEGMENT_WRITE_KEY_ID:
             logger.info("Fetching Segment Write Key...")
-            self.write_key = await self._get_secret(config.SEGMENT_WRITE_KEY_ID)
+            self.write_key = config.SEGMENT_WRITE_KEY_ID
             if self.write_key:
                 logger.info("Segment Write Key loaded.")
         else:
