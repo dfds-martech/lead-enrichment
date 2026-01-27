@@ -1,4 +1,4 @@
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,10 @@ class Config(BaseSettings):
     SERVICE_BUS_NAMESPACE: str = ""
     SERVICE_BUS_TOPIC_NAME: str = ""
     SERVICE_BUS_SUBSCRIPTION_NAME: str = ""
+    SERVICE_BUS_USE_WEBSOCKET: bool = Field(
+        default=False,
+        description="Use WebSocket transport for VPN compatibility (slower, port 443 vs standard AMQP port 5671)",
+    )
 
     # GCP & BigQuery
     GCPPROJECTID: str = ""  # Used for Secret Manager project path
