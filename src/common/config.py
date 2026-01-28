@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Config(BaseSettings):
+    ENVIRONMENT: str = Field(default="development")
+
     # Leads
     # TODO: Add leads settings
 
@@ -59,7 +61,7 @@ class Config(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_format: str = "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), case_sensitive=False, extra="ignore")
 
 
 config = Config()
