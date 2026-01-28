@@ -1,6 +1,6 @@
-import uuid
 import asyncio
 import json
+import uuid
 from datetime import UTC, datetime
 from enum import Enum
 
@@ -16,9 +16,7 @@ from pipeline.orchestrator import PipelineOrchestrator, PipelineResult
 
 # Service Imports
 from services.bigquery.client import BigQueryClient
-from services.bigquery.schemas import BigQueryRow
 from services.segment.client import SegmentClient
-from services.segment.schemas import SegmentTrackEvent
 
 logger = get_logger(__name__)
 
@@ -161,11 +159,11 @@ class ServiceBusClient:
                     messages = await receiver.receive_messages(max_message_count=max_count, max_wait_time=5)
                     if not messages:
                         break
-                    
+
                     for msg in messages:
                         await receiver.complete_message(msg)
                         completed_count += 1
-                    
+
                     logger.info(f"Completed batch of {len(messages)} messages...")
 
         logger.info(f"Flushed {completed_count} messages from the queue.")
@@ -177,24 +175,21 @@ class ServiceBusClient:
         """Save enrichment results to file for inspection."""
         if config.ENVIRONMENT != "development":
             return
-        
+
         from pathlib import Path
-        
+
         results_dir = Path("results")
         results_dir.mkdir(exist_ok=True)
-        
+
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp}-{lead.id}.json"
         filepath = results_dir / filename
-        
-        output = {
-            "lead": lead.model_dump(mode='json'),
-            "results": result_dict
-        }
-        
-        with open(filepath, 'w') as f:
+
+        output = {"lead": lead.model_dump(mode="json"), "results": result_dict}
+
+        with open(filepath, "w") as f:
             json.dump(output, f, indent=2)
-        
+
         logger.info(f"Results saved to {filepath}")
 
     # --- Event Publishing ---
@@ -207,7 +202,7 @@ class ServiceBusClient:
         result: PipelineResult,
     ) -> None:
         """Publish enrichment events for each enrichment type."""
-        result_dict = result.model_dump(mode='json')
+        result_dict = result.model_dump(mode="json")
 
         for enrichment_type, enrichment_result in result_dict.items():
             if enrichment_result is not None:
@@ -334,7 +329,7 @@ class ServiceBusClient:
                 receiver = self.client.get_subscription_receiver(
                     topic_name=self.topic_name,
                     subscription_name=self.subscription_name,
-                    max_lock_renewal_duration=300  # 5 minutes
+                    max_lock_renewal_duration=300,  # 5 minutes
                 )
                 async with receiver:
                     logger.info(f"Listening on {self.topic_name}/{self.subscription_name}")
@@ -347,11 +342,7 @@ class ServiceBusClient:
             raise
 
     async def publish(
-        self, 
-        event_type: str, 
-        event_data: dict, 
-        correlation_id: str | None,
-        source_system_record_id: str | None = None
+        self, event_type: str, event_data: dict, correlation_id: str | None, source_system_record_id: str | None = None
     ) -> None:
         """Publish an event to Service Bus."""
         event = {
@@ -367,11 +358,7 @@ class ServiceBusClient:
 
         sender = self.client.get_topic_sender(topic_name=self.topic_name)
         async with sender:
-            msg = ServiceBusMessage(
-                json.dumps(event),
-                subject=event_type,
-                correlation_id=correlation_id
-            )
+            msg = ServiceBusMessage(json.dumps(event), subject=event_type, correlation_id=correlation_id)
             await sender.send_messages(msg)
             logger.info(f"Published event: {event_type}")
 
@@ -387,5 +374,3 @@ class ServiceBusClient:
 
         # Final flush of any remaining data
         await self.bq_service.flush()
-
-    
