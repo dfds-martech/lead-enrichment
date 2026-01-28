@@ -1,10 +1,12 @@
 # Work files
 data/
+results/
 notebooks/*.*
 !notebooks/*_shared.ipynb
 
 # Env files
 .env
+.env.local
 
 # Python-generated files
 __pycache__/
