@@ -1,3 +1,4 @@
+import uuid
 import asyncio
 import json
 from datetime import UTC, datetime
@@ -170,16 +171,43 @@ class ServiceBusClient:
         logger.info(f"Flushed {completed_count} messages from the queue.")
         return completed_count
 
-    # --- Event Payload Builders ---
+    # --- Test save output results ---
+
+    def _save_results_to_file(self, lead: Lead, result_dict: dict) -> None:
+        """Save enrichment results to file for inspection."""
+        if config.ENVIRONMENT != "development":
+            return
+        
+        from pathlib import Path
+        
+        results_dir = Path("results")
+        results_dir.mkdir(exist_ok=True)
+        
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}-{lead.id}.json"
+        filepath = results_dir / filename
+        
+        output = {
+            "lead": lead.model_dump(mode='json'),
+            "results": result_dict
+        }
+        
+        with open(filepath, 'w') as f:
+            json.dump(output, f, indent=2)
+        
+        logger.info(f"Results saved to {filepath}")
+
+    # --- Event Publishing ---
 
     async def _publish_enrichment_events(
         self,
-        event_id: str,
+        correlation_id: str,
+        source_system_record_id: str,
         lead: Lead,
         result: PipelineResult,
     ) -> None:
         """Publish enrichment events for each enrichment type."""
-        result_dict = result.model_dump()
+        result_dict = result.model_dump(mode='json')
 
         for enrichment_type, enrichment_result in result_dict.items():
             if enrichment_result is not None:
@@ -187,7 +215,8 @@ class ServiceBusClient:
                 await self.publish(
                     event_type=output_event.value,
                     event_data=enrichment_result,
-                    correlation_id=event_id,
+                    correlation_id=correlation_id,
+                    source_system_record_id=source_system_record_id,
                 )
 
         # Publish pipeline completion if all enrichments ran
@@ -195,8 +224,12 @@ class ServiceBusClient:
             await self.publish(
                 event_type=OutgoingEventType.PIPELINE_COMPLETED.value,
                 event_data={"leadId": lead.id, "status": "success"},
-                correlation_id=event_id,
+                correlation_id=correlation_id,
+                source_system_record_id=source_system_record_id,
             )
+
+        # TEMP - SAVE TO FILE
+        self._save_results_to_file(lead, result_dict)
 
     # --- Background Tasks ---
 
@@ -216,7 +249,17 @@ class ServiceBusClient:
             event_body = json.loads(body_str)
             event_id = event_body.get("eventId", "unknown")
             event_type_str = event_body.get("eventType")
-            logger.info(f"Event received: {event_type_str} | id={event_id} | Processing...")
+
+            # Source System
+            source_system = event_body.get("sourceSystem")
+            source_system_record_id = event_body.get("sourceSystemRecordID", "unknown")
+            logger.info(f"Event received: {event_type_str} | id={event_id} | source={source_system} | Processing...")
+
+            # Skip our own published events
+            if source_system == "lead-enrichment":
+                logger.info(f"Skipping own event: {event_type_str}")
+                await receiver.complete_message(message)
+                return
 
             event_type = IncomingEventType.from_string(event_type_str)
             if event_type is None:
@@ -246,7 +289,7 @@ class ServiceBusClient:
                 elif event_type.is_full_pipeline():
                     result = await self.orchestrator.run_pipeline(lead)
 
-                await self._publish_enrichment_events(event_id, lead, result)
+                await self._publish_enrichment_events(event_id, source_system_record_id, lead, result)
                 event_body["enrichment"] = result.model_dump()
                 logger.info(f"Enrichment successful for lead {lead.id}")
 
@@ -274,10 +317,10 @@ class ServiceBusClient:
 
             # --- STEP 3: COMPLETE (ACK) ---
             await receiver.complete_message(message)
+            logger.info(f"Message {message.message_id} completed")
 
         except Exception as e:
             logger.error(f"Processing failed for message {message.message_id}: {e}")
-            # Message NOT completed -> Retry
 
     async def listen(self) -> None:
         """Start the listener loop."""
@@ -286,14 +329,51 @@ class ServiceBusClient:
         # Start the periodic flusher for BigQuery
         self._flusher_task = asyncio.create_task(self._periodic_flusher())
 
-        async with self.client:
-            receiver = self.client.get_subscription_receiver(
-                topic_name=self.topic_name, subscription_name=self.subscription_name
+        try:
+            async with self.client:
+                receiver = self.client.get_subscription_receiver(
+                    topic_name=self.topic_name,
+                    subscription_name=self.subscription_name,
+                    max_lock_renewal_duration=300  # 5 minutes
+                )
+                async with receiver:
+                    logger.info(f"Listening on {self.topic_name}/{self.subscription_name}")
+                    async for msg in receiver:
+                        await self._handle_message(msg, receiver)
+        except asyncio.CancelledError:
+            logger.info("Listener task cancelled. Shutting down...")
+        except Exception as e:
+            logger.error(f"Listener error: {e}")
+            raise
+
+    async def publish(
+        self, 
+        event_type: str, 
+        event_data: dict, 
+        correlation_id: str | None,
+        source_system_record_id: str | None = None
+    ) -> None:
+        """Publish an event to Service Bus."""
+        event = {
+            "eventId": str(uuid.uuid4()),
+            "eventType": event_type,
+            "eventVersion": "1.0",
+            "eventTimestamp": datetime.now(UTC).isoformat(),
+            "sourceSystem": "lead-enrichment",
+            "sourceSystemRecordId": source_system_record_id,
+            "correlationId": correlation_id,
+            "data": event_data,
+        }
+
+        sender = self.client.get_topic_sender(topic_name=self.topic_name)
+        async with sender:
+            msg = ServiceBusMessage(
+                json.dumps(event),
+                subject=event_type,
+                correlation_id=correlation_id
             )
-            async with receiver:
-                logger.info(f"Listening on {self.topic_name}/{self.subscription_name}")
-                async for msg in receiver:
-                    await self._handle_message(msg, receiver)
+            await sender.send_messages(msg)
+            logger.info(f"Published event: {event_type}")
 
     async def flush_all(self) -> None:
         """Flush pending data and stop background tasks. Used for clean shutdown."""
@@ -308,20 +388,4 @@ class ServiceBusClient:
         # Final flush of any remaining data
         await self.bq_service.flush()
 
-    async def publish(self, event_type: str, event_data: dict, correlation_id: str | None = None) -> None:
-        """Publish an event to Service Bus."""
-        event = {
-            "eventId": f"{event_type}-{datetime.now(UTC).isoformat()}",
-            "eventType": event_type,
-            "eventVersion": "1.0",
-            "eventTimestamp": datetime.now(UTC).isoformat(),
-            "sourceSystem": "lead-enrichment",
-            "correlationId": correlation_id or event_data.get("leadId"),
-            "data": event_data,
-        }
-
-        sender = self.client.get_topic_sender(topic_name=self.topic_name)
-        async with sender:
-            msg = ServiceBusMessage(json.dumps(event), correlation_id=correlation_id)
-            await sender.send_messages(msg)
-            logger.info(f"Published event: {event_type}")
+    
