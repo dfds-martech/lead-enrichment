@@ -77,9 +77,11 @@ class ServiceBusClient:
         
         # Config
         self.bq_flush_interval = 10  # Seconds
+        self.max_concurrent = config.SERVICE_BUS_MAX_CONCURRENT
 
         # Background task tracking
         self._flusher_task: asyncio.Task | None = None
+        self._active_tasks: set[asyncio.Task] = set()
 
     def _create_service_bus_client(self) -> AzureServiceBusClient:
         credential = ClientSecretCredential(
@@ -141,22 +143,49 @@ class ServiceBusClient:
             self._flusher_task = asyncio.create_task(self._periodic_flush_loop())
             logger.info("BigQuery periodic flusher started")
 
+        # Semaphore to limit concurrent processing
+        semaphore = asyncio.Semaphore(self.max_concurrent)
+
         try:
             async with self.client:
                 receiver = self.client.get_subscription_receiver(
                     topic_name=self.topic_name,
                     subscription_name=self.subscription_name,
                     max_lock_renewal_duration=300,  # 5 minutes
+                    prefetch_count=self.max_concurrent,  # Pre-fetch messages for efficiency
                 )
                 async with receiver:
-                    logger.info(f"Listening on {self.topic_name}/{self.subscription_name}")
+                    logger.info(
+                        f"Listening on {self.topic_name}/{self.subscription_name} "
+                        f"(max_concurrent={self.max_concurrent}, prefetch={self.max_concurrent})"
+                    )
                     async for msg in receiver:
-                        await self._handle_message(msg, receiver)
+                        # Clean up completed tasks
+                        self._active_tasks = {t for t in self._active_tasks if not t.done()}
+                        
+                        # Create new task for concurrent processing
+                        task = asyncio.create_task(
+                            self._handle_message_with_semaphore(msg, receiver, semaphore)
+                        )
+                        self._active_tasks.add(task)
+                        
         except asyncio.CancelledError:
-            logger.info("Listener task cancelled. Shutting down...")
+            logger.info("Listener cancelled, waiting for active tasks...")
+            # Wait for all active tasks to complete
+            if self._active_tasks:
+                await asyncio.gather(*self._active_tasks, return_exceptions=True)
+            logger.info("All tasks completed. Shutting down...")
+            raise
         except Exception as e:
             logger.error(f"Listener error: {e}")
             raise
+
+    async def _handle_message_with_semaphore(
+        self, message: ServiceBusMessage, receiver: ServiceBusReceiver, semaphore: asyncio.Semaphore
+    ) -> None:
+        """Handle message with concurrency control via semaphore."""
+        async with semaphore:
+            await self._handle_message(message, receiver)
 
     async def _handle_message(self, message: ServiceBusMessage, receiver: ServiceBusReceiver) -> None:
         """Process a single message: Enrich -> Publish -> Archive (async) -> ACK."""
@@ -204,7 +233,8 @@ class ServiceBusClient:
                 event_body["enrichment_error"] = str(enrich_err)
 
             # --- STEP 2: ARCHIVE ---
-            asyncio.create_task(self._archive_event(message, event_body))
+            # Wait for archive before ACK to prevent message loss on crash
+            await self._archive_event(message, event_body)
 
             # --- STEP 3: COMPLETE (ACK) ---
             await receiver.complete_message(message)
@@ -346,6 +376,14 @@ class ServiceBusClient:
     async def shutdown(self) -> None:
         """Graceful shutdown: stop tasks and flush pending data."""
         logger.info("Shutting down ServiceBusClient...")
+        
+        # Wait for active message processing tasks
+        if self._active_tasks:
+            logger.info(f"Waiting for {len(self._active_tasks)} active tasks to complete...")
+            await asyncio.gather(*self._active_tasks, return_exceptions=True)
+            logger.info("All active tasks completed")
+        
+        # Stop background flusher
         if self._flusher_task is not None:
             self._flusher_task.cancel()
             try:
