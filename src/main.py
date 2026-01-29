@@ -36,13 +36,10 @@ async def lifespan(app: FastAPI):
         logger.info("Service Bus listener disabled via SERVICE_BUS_ENABLED=false")
         app.state.service_bus = None
 
-    yield  # Application runs here
+    yield
 
     # Cleanup on Shutdown
     logger.info("Application shutting down...")
-
-    if app.state.service_bus is not None:
-        await app.state.service_bus.flush_all()
 
     if listener_task is not None:
         listener_task.cancel()
@@ -50,6 +47,10 @@ async def lifespan(app: FastAPI):
             await listener_task
         except asyncio.CancelledError:
             logger.info("Listener stopped gracefully.")
+
+    # Flush any remaining data after listener stops
+    if app.state.service_bus is not None:
+        await app.state.service_bus.shutdown()
 
 
 # Initialize app with lifespan
