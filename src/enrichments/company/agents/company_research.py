@@ -22,7 +22,7 @@ from agents import Agent, OpenAIChatCompletionsModel
 from common.config import config
 from services.azure_openai_service import AzureOpenAIService
 from services.google_search.tools import google_search
-from services.serper_search.tools import search_web
+# from services.serper_search.tools import search_web
 from services.web_scraper.tools import scrape_website
 
 
@@ -67,13 +67,13 @@ Note on sparse or ambiguous inputs: If the name is partial, incomplete, or commo
 - If no reliable sources match the provided country, city, or representative, leave most fields null and explain in reasoning (e.g., 'No matching company found in {country}; name too ambiguous without location confirmation').
 - Prioritize exact or near-exact matches; do not expand or assume full names without evidence.
 
-You may use two tools: search_web (to get search hits) and scrape_website (to fetch page text). Use them strategically:
+You may use two tools: google_search (to get search hits) and scrape_website (to fetch page text). Use them strategically:
 
 1. If the provided domain does not appear to be a free email provider, pay a direct visit to the company's website to get the most up-to-date information.
    - {domain}
    Otherwise, skip this and focus on searches to identify the official domain.
 
-2. Use search_web with targeted queries such as:
+2. Use google_search with targeted queries such as:
    - "{name} official website {country}"
    - "{name}" company number {country}
    - "{name} {representative} {city} {country}"
@@ -82,7 +82,7 @@ You may use two tools: search_web (to get search hits) and scrape_website (to fe
    - If domain is a free provider: "{name} {representative} {city} {country} website" or "{name} official domain {country}"
    Always include country and representative (if provided) in queries to ensure relevance and avoid unrelated results.
 
-3. Select 2-3 promising URLs (prioritize those matching a validated domain or official sources in the correct country) and use scrape_website to retrieve their content. Skip URLs that do not align with the provided country.
+3. Select 2-4 promising URLs (prioritize those matching a validated domain or official sources in the correct country) and use scrape_website to retrieve their content. Skip URLs that do not align with the provided country.
 
 4. From your web search and scraped text, extract factual information and map it into the CompanyResearchResult schema.
    Available output fields:
@@ -97,7 +97,11 @@ You may use two tools: search_web (to get search hits) and scrape_website (to fe
 
 6. Output requirement: Return exactly valid JSON conforming to CompanyResearchResult. No extra keys, no narrative text.
 
-7. Efficiency: Use as few tool calls as possible (2-5 web searches, 2-3 scrapes maximum). If scraping fails, return what you have from search results.
+7. Efficiency: 
+- Do not exceed 6 web searches (start with 2-3 searches, narrow if needed.
+- Do not exceed 4 scrapes (prioritize official site, company registry sites, company information sites).
+- If scraping fails, return what you find from search results.
+- Quality over speed for ambiguous cases
 
 Example input:
 json
@@ -129,7 +133,7 @@ def create_company_research_agent(model: str = config.openai_model) -> Agent[Com
         name="Company Research Assistant",
         instructions=COMPANY_RESEARCH_INSTRUCTIONS,
         output_type=CompanyResearchResult,
-        tools=[search_web, google_search, scrape_website],
+        tools=[google_search, scrape_website],
         model=azure_model,
     )
 
