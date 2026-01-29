@@ -73,7 +73,7 @@ async def google_search(
         - Language codes: lang_en (English), lang_da (Danish), lang_de (German), etc.
         - Country codes: countryDK (Denmark), countryUS (USA), countryDE (Germany), etc.
     """
-    logger.info(f"Google search tool called with query: {query}")
+    logger.info(f"Google search tool called with query: {query}, num_results: {num_results}, language: {language}")
     try:
         request = GoogleSearchRequest(
             query=query,
@@ -91,7 +91,7 @@ async def google_search(
         request.validate_request()
 
         client = GoogleSearchClient()
-        response = client.search(request)
+        response = await client.search(request)
 
         return str(response)
 
