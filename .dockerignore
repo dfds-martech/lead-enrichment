@@ -61,6 +61,7 @@ notebooks/
 
 # Data
 data/
+results/
 *.csv
 *.json
 *.parquet
@@ -68,3 +69,15 @@ data/
 # Logs
 *.log
 logs/
+
+# Misc
+docker-compose.yml
+Dockerfile
+.dockerignore
+cloudbuild.yaml
+deploy.sh
+TODO.md
+NOTES.md
+
+# Tests
+tests/
