@@ -19,7 +19,7 @@ def main():
     print("-" * 50)
 
     uvicorn.run(
-        "main:app",
+        "src.main:app",
         host="0.0.0.0",
         port=port,
         workers=1,  # Cloud Run handles scaling

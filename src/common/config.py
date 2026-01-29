@@ -41,7 +41,7 @@ class Config(BaseSettings):
 
     # GCP & BigQuery
     GCPPROJECTID: str = ""  # Used for Secret Manager project path
-    BQPROJECTID: str = ""
+    BQPROJECTID: str = ""  # Set to enable BigQuery archiving
     BQDATASETID: str = ""
     BQTABLEID: str = ""
 
