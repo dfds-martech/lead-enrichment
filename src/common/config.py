@@ -38,6 +38,10 @@ class Config(BaseSettings):
         default=False,
         description="Use WebSocket transport for VPN compatibility (slower, port 443 vs standard AMQP port 5671)",
     )
+    SERVICE_BUS_MAX_CONCURRENT: int = Field(
+        default=10,
+        description="Maximum number of messages to process concurrently",
+    )
 
     # GCP & BigQuery
     GCPPROJECTID: str = ""  # Used for Secret Manager project path
