@@ -184,12 +184,13 @@ class Lead(BaseModel):
     """A lead from the CRM (including associated entires, e.g. company, delivery, and collection)."""
 
     # Metadata
+    id: str
+    system_id: str | None = None
     type: LeadType | None = None
     created_on: str | None = None
     modified_on: str | None = None
 
     # Processed fields
-    id: str
     identifiers: dict
     contact: dict
     company: dict
@@ -207,7 +208,8 @@ class Lead(BaseModel):
 
         data = event.get("data", {})
         
-        full_payload_str = data.get("lead", {}).get("fullPayLoad")
+        full_payload_str = data.get("lead", {}).get("fullPayload")
+
         if isinstance(full_payload_str, str):
             try:
                 payload = json.loads(full_payload_str)
@@ -228,15 +230,19 @@ class Lead(BaseModel):
         quote = LeadQuote.from_payload(payload)
 
         return cls(
+            # Metadata
             id=data.get("lead", {}).get("crmLeadId", "UNKNOWN_LEAD_ID"),
+            system_id=event.get("sourceSystemRecordID", "UNKNOWN_SYSTEM_RECORD_ID"),
             type=lead_type,
             created_on=event.get("eventTimestamp"),
+            # Processed fields
             identifiers=identifiers,
             contact=contact,
             company=company,
             collection=collection,
             delivery=delivery,
             quote=quote,
+            # Raw data
             payload=payload,
             record=event,
         )
@@ -347,10 +353,10 @@ def _extract_identifiers_from_payload(event: dict, payload: dict) -> dict:
     anonymous_id = userSegmentID.get("anonymousUserId", None)
 
     return {
-        "user_id": payload.get("segmentId", user_id) or None,
-        "anonymous_id": payload.get("anonymousSegmentId", anonymous_id) or None,
+        "user_id": payload.get("segmentId") or user_id,
+        "anonymous_id": payload.get("anonymousSegmentId") or anonymous_id,
         "email": payload.get("CompanyEmail", None),
-        "phone": payload.get("PhoneNumber", None) or phone_number,
+        "phone": payload.get("PhoneNumber") or phone_number,
     }
 
 
