@@ -6,6 +6,8 @@ organized by domain with explicit priority rules.
 Priority order for data resolution: details > match > research
 """
 
+from typing import Literal
+
 from enrichments.base_features import (
     get_email_domain_type,
     get_employees_bracket,
@@ -316,6 +318,9 @@ def _extract_financials(details: OrbisCompanyDetails | None) -> CompanyFinancial
         revenue_bracket=get_revenue_bracket(fin.operating_revenue),
         profit_bracket=get_profit_before_tax_bracket(fin.profit_before_tax),
         assets_bracket=get_total_assets_bracket(fin.total_assets),
+        # Credit risk
+        credit_risk_rating=fin.credit_risk_rating,
+        credit_risk_rating_label=fin.credit_risk_rating_label,
         # Derived
         accounting_year=accounting_year,
         financial_health=financial_health,
@@ -328,42 +333,41 @@ def _extract_financials(details: OrbisCompanyDetails | None) -> CompanyFinancial
 # ============================================================================
 
 
-def _assess_financial_health(financials) -> str:
-    """Assess financial health based on financial indicators.
-
-    Returns:
-        'healthy', 'moderate', 'at_risk', or 'unknown'
-    """
+def _assess_financial_health(financials) -> Literal["healthy", "moderate", "at_risk", "unknown"]:
+    """Simple financial health assessment."""
     if not financials:
         return "unknown"
-
-    has_data = (
-        financials.has_data()
-        if hasattr(financials, "has_data")
-        else any(
-            [
-                financials.profit_before_tax,
-                financials.profit_loss,
-                financials.cash_flow,
-            ]
-        )
-    )
-
-    if not has_data:
+    
+    # Prefer Orbis credit risk rating if available
+    if financials.credit_risk_rating_label:
+        rating = financials.credit_risk_rating_label.upper()
+        # Map Orbis ratings (A/B/C/D scale)
+        if rating.startswith('A'):
+            return "healthy"
+        elif rating.startswith('B'):
+            return "moderate"
+        elif rating.startswith(('C', 'D')):
+            return "at_risk"
+    
+    # Fallback: simple positive/negative logic
+    profit = financials.profit_before_tax if financials.profit_before_tax is not None else financials.profit_loss
+    cashflow = financials.cash_flow
+    
+    if profit is None and cashflow is None:
         return "unknown"
-
-    profit_positive = (financials.profit_before_tax is not None and financials.profit_before_tax > 0) or (
-        financials.profit_loss is not None and financials.profit_loss > 0
-    )
-
-    cash_flow_positive = financials.cash_flow is not None and financials.cash_flow > 0
-
-    if profit_positive and cash_flow_positive:
-        return "healthy"
-    if not profit_positive and not cash_flow_positive:
-        return "at_risk"
-
-    return "moderate"
+    
+    # Both metrics available: check direction
+    if profit is not None and cashflow is not None:
+        if profit > 0 and cashflow > 0:
+            return "healthy"
+        elif profit < 0 and cashflow < 0:
+            return "at_risk"
+        else:
+            return "moderate"  # Mixed signals
+    
+    # Single metric: moderate if positive, at_risk if negative
+    single_value = profit if profit is not None else cashflow
+    return "moderate" if single_value >= 0 else "at_risk"
 
 
 def _normalize_domain(url: str | None) -> str | None:

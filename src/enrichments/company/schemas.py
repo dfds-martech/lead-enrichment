@@ -4,6 +4,8 @@ Defines the structured output models for company enrichment,
 organized by domain for clarity and maintainability.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from services.orbis.schemas import OrbisCompanyDetails
@@ -95,9 +97,15 @@ class CompanyFinancials(BaseModel):
     profit_bracket: str = Field("unknown", description="Profit bracket")
     assets_bracket: str = Field("unknown", description="Assets bracket")
 
+    # Credit risk
+    credit_risk_rating: str | None = Field(None, description="Credit risk rating category")
+    credit_risk_rating_label: str | None = Field(None, description="Credit risk rating short label")
+
     # Derived metrics
     accounting_year: str = Field("unknown", description="Year of financial data")
-    financial_health: str = Field("unknown", description="Health: healthy|moderate|at_risk|unknown")
+    financial_health: Literal["healthy", "moderate", "at_risk", "unknown"] = Field(
+        "unknown", description="Financial health assessment"
+    )
     has_data: bool = Field(False, description="Whether any financial data is available")
 
 
