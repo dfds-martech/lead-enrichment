@@ -67,7 +67,7 @@ class ServiceBusClient:
         self.topic_name = config.SERVICE_BUS_TOPIC_NAME
         self.subscription_name = config.SERVICE_BUS_SUBSCRIPTION_NAME
         self.client = self._create_service_bus_client()
-
+        
         # Core enrichment service
         self.orchestrator = PipelineOrchestrator()
 
@@ -76,9 +76,9 @@ class ServiceBusClient:
         self._segment_service = None
         
         # Config
-        self.bq_flush_interval = 10  # Seconds
         self.max_concurrent = config.SERVICE_BUS_MAX_CONCURRENT
-
+        self.bq_flush_interval = 10  # Seconds
+        
         # Background task tracking
         self._flusher_task: asyncio.Task | None = None
         self._active_tasks: set[asyncio.Task] = set()
@@ -159,15 +159,33 @@ class ServiceBusClient:
                         f"Listening on {self.topic_name}/{self.subscription_name} "
                         f"(max_concurrent={self.max_concurrent}, prefetch={self.max_concurrent})"
                     )
-                    async for msg in receiver:
-                        # Clean up completed tasks
-                        self._active_tasks = {t for t in self._active_tasks if not t.done()}
-                        
-                        # Create new task for concurrent processing
-                        task = asyncio.create_task(
-                            self._handle_message_with_semaphore(msg, receiver, semaphore)
+                    
+                    while True:
+                        # Receive messages in batches
+                        messages = await receiver.receive_messages(
+                            max_message_count=self.max_concurrent,
+                            max_wait_time=5
                         )
-                        self._active_tasks.add(task)
+                        
+                        if not messages:
+                            await asyncio.sleep(0.1)
+                            continue
+                        
+                        logger.info(f"Received {len(messages)} messages")
+                        
+                        # Process messages concurrently
+                        for msg in messages:
+                            # Clean up completed tasks
+                            self._active_tasks = {t for t in self._active_tasks if not t.done()}
+                            
+                            # Create new task for concurrent processing
+                            task = asyncio.create_task(
+                                self._handle_message_with_semaphore(msg, receiver, semaphore)
+                            )
+                            self._active_tasks.add(task)
+                        
+                        # Yield control to event loop
+                        await asyncio.sleep(0) 
                         
         except asyncio.CancelledError:
             logger.info("Listener cancelled, waiting for active tasks...")
@@ -188,32 +206,35 @@ class ServiceBusClient:
             await self._handle_message(message, receiver)
 
     async def _handle_message(self, message: ServiceBusMessage, receiver: ServiceBusReceiver) -> None:
-        """Process a single message: Enrich -> Publish -> Archive (async) -> ACK."""
+        """Process message: Enrich -> Publish -> Archive (async) -> ACK."""
         try:
             body_str = str(message)
             event_body = json.loads(body_str)
             event_id = event_body.get("eventId", "unknown")
             event_type_str = event_body.get("eventType")
 
+            self._save_incoming_message(event_body)
+
             # Source System
             source_system = event_body.get("sourceSystem")
             source_system_record_id = event_body.get("sourceSystemRecordID", "unknown")
             logger.info(f"Event received: {event_type_str} | id={event_id} | source={source_system} | Processing...")
 
-            # Skip our own published events
-            if source_system == "lead-enrichment":
-                logger.info(f"Skipping own event: {event_type_str}")
-                await receiver.complete_message(message)
-                return
-
+            # Validate event type
             event_type = IncomingEventType.from_string(event_type_str)
             if event_type is None:
                 logger.warning(f"Event type '{event_type_str}' not accepted. Dead-lettering.")
                 await receiver.dead_letter_message(
                     message,
                     reason="UnknownEventType",
-                    error_description=f"Event type '{event_type_str}' not in accepted list",
+                    error_description=f"Event type '{event_type_str}' not accepted for lead enrichment.",
                 )
+                return
+            
+            # Skip our own published events
+            if source_system == "lead-enrichment":
+                logger.info(f"Event source type is self: {event_type_str}")
+                await receiver.complete_message(message)
                 return
 
             result = PipelineResult()
@@ -232,8 +253,7 @@ class ServiceBusClient:
                 logger.error(f"Enrichment failed (continuing to archive raw event): {enrich_err}")
                 event_body["enrichment_error"] = str(enrich_err)
 
-            # --- STEP 2: ARCHIVE ---
-            # Wait for archive before ACK to prevent message loss on crash
+            # --- STEP 2: ARCHIVE (Google BigQuery & Segment) ---
             await self._archive_event(message, event_body)
 
             # --- STEP 3: COMPLETE (ACK) ---
@@ -466,6 +486,27 @@ class ServiceBusClient:
 
         logger.info(f"Flushed {completed_count} messages from the queue.")
         return completed_count
+    
+    def _save_incoming_message(self, event_body: dict) -> None:
+        """Save incoming message to file for testing."""
+        if config.ENVIRONMENT != "development":
+            return
+        
+        from pathlib import Path
+        
+        input_dir = Path("results/input")
+        input_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        event_id = event_body.get("eventId", "unknown")[:8]
+        event_type = event_body.get("eventType", "unknown").replace(".", "_")
+        filename = f"{timestamp}-{event_type}-{event_id}.json"
+        filepath = input_dir / filename
+        
+        with open(filepath, "w") as f:
+            json.dump(event_body, f, indent=2)
+
+        logger.info(f"Saved to {filepath}")
 
     def _save_results_for_inspection(self, lead: Lead, result_dict: dict) -> None:
         """Save enrichment results to file for inspection."""
@@ -486,4 +527,4 @@ class ServiceBusClient:
         with open(filepath, "w") as f:
             json.dump(output, f, indent=2)
 
-        logger.info(f"Results saved to {filepath}")
+        logger.info(f"Saved to {filepath}")
