@@ -73,6 +73,7 @@ class CRMService:
             "eventVersion": "1.0",
             "eventTimestamp": record.get("modifiedon") or record.get("createdon") or datetime.now().isoformat(),
             "sourceSystem": "d365-sales",
+            "sourceSystemRecordId": record.get("leadid"),
             "entityType": "Lead",
             "data": {
                 "contact": {
@@ -99,7 +100,7 @@ class CRMService:
                         "postalCode": record.get("address1_postalcode"),
                         "state": record.get("address1_stateorprovince"),
                         "country": country_lookup.name if country_lookup else None,
-                        "country_code": country_lookup.alpha2 if country_lookup else None,
+                        "countryCode": country_lookup.alpha2 if country_lookup else None,
                     },
                 },
                 "campaign": {
@@ -117,12 +118,20 @@ class CRMService:
                     "sourceId": record.get("dfds_sourceid"),
                     "requestNumber": record.get("dfds_requestnumber"),
                     "description": payload.get("DescribeYourCargo"),
-                    "collectionCity": record.get("dfds_collectioncity"),
-                    "collectionCountry": collection_country.name if collection_country else None,
-                    "collectionCountryCode": collection_country.alpha2 if collection_country else None,
-                    "deliveryCity": record.get("dfds_deliverycity"),
-                    "deliveryCountry": delivery_country.name if delivery_country else None,
-                    "deliveryCountryCode": delivery_country.alpha2 if delivery_country else None,
+                    "collectionAddress": {
+                        "line1": record.get("dfds_collectionaddressline1"),
+                        "line2": record.get("dfds_collectionaddressline2"),
+                        "city": record.get("dfds_collectioncity"),
+                        "country": collection_country.name if collection_country else None,
+                        "countryCode": collection_country.alpha2 if collection_country else None,
+                    },
+                    "deliveryAddress": {
+                        "line1": record.get("dfds_deliveryaddressline1"),
+                        "line2": record.get("dfds_deliveryaddressline2"),
+                        "city": record.get("dfds_deliverycity"),
+                        "country": delivery_country.name if delivery_country else None,
+                        "countryCode": delivery_country.alpha2 if delivery_country else None,
+                    },
                     "quoteNotes": record.get("dfds_quotenotes"),
                     "requestType": record.get("dfds_requesttype"),
                     "sourceName": record.get("dfds_sourcename"),
