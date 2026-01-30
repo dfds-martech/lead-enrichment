@@ -58,6 +58,8 @@ class OrbisCompanyFinancials(BaseModel):
     total_assets: float | None
     shareholders_funds: float | None
     accounting_year: datetime | None
+    credit_risk_rating: str | None  # Credit risk rating category
+    credit_risk_rating_label: str | None  # Credit risk rating short label
 
     @staticmethod
     def from_dict(data: dict) -> "OrbisCompanyFinancials":
@@ -78,6 +80,8 @@ class OrbisCompanyFinancials(BaseModel):
             total_assets=data.get("TOAS_EUR"),
             shareholders_funds=data.get("SHFD_EUR"),
             accounting_year=year,
+            credit_risk_rating=data.get("FSPulse_CreditRiskRating"),
+            credit_risk_rating_label=data.get("FSPulse_CreditRiskRating_SHORT"),
         )
 
     def has_data(self) -> bool:

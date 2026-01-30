@@ -239,6 +239,12 @@ class OrbisClient:
             for code in financial_codes
         ]
 
+        # Credit risk fields
+        credit_risk_fields = [
+            "FSPulse_CreditRiskRating_SHORT",  # Credit risk rating – label
+            "FSPulse_CreditRiskRating",  # Credit risk rating – category
+        ]
+
         default_fields = [
             *DEFAULT_FIELDS,
             "ADDRESS_LINE2",
@@ -246,6 +252,7 @@ class OrbisClient:
             "YEAR_LAST_ACCOUNTS",
             "LEGAL_STATUS",
             *financial_fields,
+            *credit_risk_fields,
         ]
 
         payload = {
