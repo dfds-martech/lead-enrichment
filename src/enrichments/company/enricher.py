@@ -8,7 +8,11 @@ Orchestrates the 4-stage company enrichment process:
 4. Features - extract categorized features from company data
 """
 
+import asyncio
 import json
+import random
+from functools import wraps
+from typing import Callable, TypeVar
 
 from agents import Agent, Runner
 
@@ -25,6 +29,87 @@ from .agents.company_match import CompanyMatchResult, create_company_match_agent
 from .agents.company_research import CompanyResearchResult, create_company_research_agent
 
 logger = get_logger(__name__)
+
+T = TypeVar("T")
+
+
+# Retry helpers
+
+
+def _calculate_backoff_delay(attempt: int, base_delay: float = 3.0) -> float:
+    """Calculate exponential backoff delay with jitter."""
+
+    delay = base_delay * (2 ** (attempt - 1))  # Exponential: 3s, 6s, 12s
+    jitter = delay * 0.2 * (2 * random.random() - 1)  # ±20% (avoid synchronized retries)
+    return delay + jitter
+
+
+def _should_retry_error(error: Exception, current_attempt: int, max_attempts: int) -> tuple[bool, float | None]:
+    """Determine if an error should be retried and calculate delay."""
+
+    if current_attempt >= max_attempts:
+        return False, None
+    
+    error_msg = str(error)
+    
+    # Rate limit errors: exponential backoff with jitter
+    if isinstance(error, RuntimeError) and "rate limit" in error_msg.lower():
+        return True, _calculate_backoff_delay(current_attempt)
+    
+    # ModelBehaviorError (invalid JSON from AI): linear backoff
+    if "ModelBehaviorError" in error_msg and "Invalid JSON" in error_msg:
+        return True, float(current_attempt)  # 1s, 2s, 3s
+    
+    # Returns "should retry", "delay_seconds"
+    return False, None
+
+
+def with_retry(operation_name: str, max_attempts: int = 3):
+    """
+    Decorator to add retry logic with exponential backoff to async functions.
+    
+    Automatically retries on:
+    - Rate limit errors (429) with exponential backoff + jitter
+    - ModelBehaviorError (invalid JSON) with linear backoff
+    
+    Args:
+        operation_name: Name for logging (e.g., "Research", "Match")
+        max_attempts: Maximum number of attempts (default 3)
+    
+    Example:
+        @with_retry("Research", max_attempts=3)
+        async def _research(self, criteria):
+            return await some_api_call(criteria)
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> T:
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    if attempt > 1:
+                        logger.debug(f"[{operation_name}] Attempt {attempt}/{max_attempts}")
+                    return await func(*args, **kwargs)
+                
+                except Exception as e:
+                    should_retry, delay = _should_retry_error(e, attempt, max_attempts)
+                    
+                    if should_retry and delay is not None:
+                        error_type = "Rate limit" if "rate limit" in str(e).lower() else "Invalid JSON"
+                        logger.warning(
+                            f"[{operation_name}] {error_type} error (attempt {attempt}/{max_attempts}). "
+                            f"Retrying in {delay:.1f}s..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    
+                    # Not retryable or final attempt - re-raise
+                    raise
+            
+            # Should never reach here, but for type safety
+            raise RuntimeError(f"[{operation_name}] Exhausted all {max_attempts} attempts")
+        
+        return wrapper
+    return decorator
 
 
 class CompanyEnricher:
@@ -57,9 +142,11 @@ class CompanyEnricher:
 
     # Research stage / web search and scraping helpers
 
+    @with_retry("Research", max_attempts=3)
     async def _research(self, criteria: CompanyResearchCriteria) -> CompanyResearchResult:
+        """Execute research agent with automatic retry on rate limits and invalid JSON."""
+        
         logger.info(f"[Research] Starting for: {criteria.name}")
-
         research_input = criteria.to_prompt()
         logger.debug(f"[Research] Prompt length: {len(research_input)} chars")
 
@@ -75,10 +162,14 @@ class CompanyEnricher:
 
         logger.info(f"[Research] Completed - domain: {result.domain}, national_id: {result.national_id}")
         return result
+    
+    # Match stage / Orbis matching helpers
 
+    @with_retry("Match", max_attempts=3)
     async def _match(
         self, criteria: CompanyResearchCriteria, research_result: CompanyResearchResult | None
     ) -> CompanyMatchResult:
+        """Execute match agent with automatic retry on rate limits."""
         logger.info(f"[Match] Starting for: {criteria.name}")
 
         match_input = {
